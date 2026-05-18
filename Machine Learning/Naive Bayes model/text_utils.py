@@ -65,3 +65,15 @@ def vectorize(input_matrix, vocab_size, tokens, vocab_list, count):
                     vectorized_inputs[i][vocab_list[token]] += 1
         
     return vectorized_inputs
+
+#Same parameters as above, except this is not for a whole matrix of inputs, just for a single input
+def vectorize_single(vocab_size, tokens, vocab_list, count):
+    vectorized_inputs = [0] * vocab_size
+    for token in tokens:
+        if token in vocab_list:
+            if not count:
+                vectorized_inputs[vocab_list[token]] = 1
+            else:
+                vectorized_inputs[vocab_list[token]] += 1
+        
+    return vectorized_inputs
