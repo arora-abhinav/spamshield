@@ -5,7 +5,7 @@ import text_utils
 from fastapi import HTTPException, status
 
 global data
-with open("/Users/abhinavarora/Desktop/Android Spam Classifier/Machine Learning/Naive Bayes model/model_params.json") as params:
+with open("model_params.json") as params:
     data = json.load(params)
 
 class_ratio_map = data["Class ratios"]
@@ -28,7 +28,8 @@ def predict_one(message):
             heapq.heappush_max(heap, (math.log(class_ratio_map[element]/n_train) + s, element))
         
         return heap[0][1]
-    except Exception:
+    except Exception as e:
+        print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Oops, something went wrong. Please report to developper")
 
 def predict_multiple(messages):
