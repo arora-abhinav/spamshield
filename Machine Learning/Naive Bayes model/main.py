@@ -1,13 +1,10 @@
-from fastapi import FastAPI, Body
-#This is the library FastAPI recommends to have to have an option query parameter
-from typing import Optional
+from fastapi import FastAPI, Body, Path
 from pydantic import BaseModel
 import classifier_model
 from datetime import datetime
 
 #sql alchemy to make edits to the database
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session
 
 #Connecting to spamshiled via connection string
 engine = create_engine("postgresql://postgres:postgreSQL%40123@localhost:5433/spamshield", echo=True)
@@ -28,7 +25,6 @@ class BulkMessages(BaseModel):
 class FeedbackMessage(BaseModel):
     prediction_id: int
     actual: str
-
 
 app = FastAPI()
 
@@ -105,3 +101,153 @@ def give_feedback(feedback: FeedbackMessage):
     })
     connection.commit()
     return {"Feedback": "Feedback received, we apologise for the inconvenience"}
+
+@app.get("/predictions_today/{device_id}{previous}")\
+
+#Obtains predictions for either today or previous days
+#Query parameter required determining if previous predictions should be returned or just today's
+def get_predictions(device_id: str, previous: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions")):
+    current_date= datetime.now().date()
+    predictions = None
+    #Only want predictions of the previous 90 days max (this number can be edited too)
+    max_days = 90
+    #Each specific phone will only get their own predictions via the device_id filtering
+
+    #Case where today's predictions must be retuned
+    if not previous:
+        predictions = connection.execute(text("""SELECT message, classification, confidence, 
+        "timestamp" FROM prediction WHERE DATE("timestamp") = :current_date 
+        AND device_id = :device_id"""), 
+        {
+        "current_date": current_date, 
+        "device_id":device_id
+        })
+    #Case where previous predictions must be returned
+    else:
+        predictions = connection.execute(text("""SELECT message, classification, confidence, 
+        "timestamp" FROM prediction WHERE DATE("timestamp") < :current_date 
+        AND device_id = :device_id AND DATE("timestamp") > 
+        :current_date - :max_days * INTERVAL '1 day' """), 
+        {
+        "current_date": current_date, 
+        "device_id":device_id,
+        "max_days": max_days
+        })
+    results = []
+    rows = predictions.fetchall()
+
+    for row in rows:
+        results.append({"Classification": row.classification, 
+                        "Confidence": row.confidence, 
+                        "Timestamp": row.timestamp, 
+                        "Message": row.message})
+
+
+    return {"Predictions": results}    
+
+@app.get("/statistics/{device_id}")
+def statistics(device_id:str):
+    spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
+    classification = :classification AND device_id = :device_id"""), 
+    {
+        "classification": "spam",
+        "device_id" : device_id
+    }).scalar()
+    ham_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
+    classification = :classification AND device_id = :device_id"""), 
+    {
+        "classification": "ham",
+        "device_id" : device_id
+    }).scalar()
+    total_messages = ham_count + spam_count
+    spam_percentage = (spam_count/total_messages) * 100 if total_messages > 0 else 0
+
+    #Obtains the number of spam today
+    today_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
+    WHERE DATE(timestamp) = CURRENT_DATE AND device_id = :device_id 
+    AND classification = :classification"""), 
+    {
+        "device_id": device_id,
+        "classification": "spam"
+
+    }).scalar()
+
+    #Obtains the number of spam this week
+    week_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
+    WHERE DATE("timestamp") >= DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id 
+    AND classification = :classification"""), #DATE_TRUNC('week', CURRENT_DATE) is the week's Monday date
+    {
+        "device_id": device_id,
+        "classification": "spam"
+
+    }).scalar()
+
+    #Obtains the number of spam this month
+    month_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
+    WHERE DATE(timestamp) >= DATE_TRUNC('month', CURRENT_DATE) AND device_id = :device_id 
+    AND classification = :classification"""), #DATE_TRUNC('month', CURRENT_DATE) is the month's beginning day
+    {
+        "device_id": device_id,
+        "classification": "spam"
+
+    }).scalar()
+
+    #Will be used in bar chart showing the spam distribution per day for the week
+    weekly_spam_distribution = connection.execute(text("""
+    SELECT COUNT(*) AS "Count", DATE("timestamp") as "Date" FROM 
+    prediction WHERE DATE("timestamp") >= 
+    DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id 
+    AND classification = :classification GROUP BY DATE("timestamp") 
+    ORDER BY DATE("timestamp") DESC
+    """),
+       {
+        "device_id": device_id,
+        "classification": "spam"
+
+    }).fetchall()
+
+    weekly_spam_distribution_data = []
+    for row in weekly_spam_distribution:
+        weekly_spam_distribution_data.append(
+            {"Count": row.Count,
+             "Date": str(row.Date)
+            }
+        )
+
+    #Obtaining average confidence score across all predictions 
+    avg_confidence_all = connection.execute(text("""
+    SELECT AVG(confidence) FROM prediction WHERE device_id = :device_id"""),
+    {
+        "device_id": device_id
+    })
+
+    #This is the average confidence score specifically for spam texts
+    avg_confidence_spam = connection.execute((text("""
+    SELECT AVG(confidence) FROM prediction WHERE classification = :classification
+    AND device_id = :device_id""")),
+    {
+        "device_id": device_id,
+        "classification": "spam"
+    })
+
+    #Retrieves the number of feedback given per week
+    num_feedback_given = connection.execute((text("""
+    SELECT COUNT(*) FROM feedback JOIN prediction ON prediction.id = feedback.prediction_id
+    WHERE DATE("timestamp") >= DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id""")), 
+    {
+        "device_id": device_id
+    }).scalar()
+
+    return {
+        "Spam Count": spam_count,
+        "Ham Count": ham_count,
+        "Total Messages": total_messages,
+        "Spam Percentage": spam_percentage,
+        "Today Spam Count": today_spam_count,
+        "Week Spam Count": week_spam_count,
+        "Month Spam Count": month_spam_count,
+        "Weekly Spam Distribution": weekly_spam_distribution_data,
+        "Average Confidence All": avg_confidence_all,
+        "Average Confidence Spam": avg_confidence_spam,
+        "Feedback Count": num_feedback_given
+    }
