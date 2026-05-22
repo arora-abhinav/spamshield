@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Body, Path
+from fastapi import FastAPI, Body, Path, Request, status
 from pydantic import BaseModel
 import classifier_model
 from datetime import datetime
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 #sql alchemy to make edits to the database
 from sqlalchemy import create_engine, text
@@ -27,6 +29,13 @@ class FeedbackMessage(BaseModel):
     actual: str
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins = ['*'],
+    allow_methods = ['*'],
+    allow_headers = ['*']
+)
 
 #HTTP endpoint to make a single prediction
 @app.post("/predict")
@@ -251,3 +260,12 @@ def statistics(device_id:str):
         "Average Confidence Spam": avg_confidence_spam,
         "Feedback Count": num_feedback_given
     }
+
+#An exception handler that catches anything else that isn't an HTTP exception
+@app.exception_handler(Exception)
+async def handle_exception(request: Request, exception: Exception):
+    print(exception) #Logs it to the server
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"message": "Oops, something went wrong. Please report to developper"},
+    )
