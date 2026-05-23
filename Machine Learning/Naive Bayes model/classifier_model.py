@@ -13,12 +13,13 @@ phi_dict = data["Phi dict"]
 n_train = data["Train examples length"]
 vocab_size = data["Vocab size"]
 vocab_list = data["Vocab list"]
+idf = data["IDF"]
  
 
 def predict_one(message):
     try:
         tokenized_msg = text_utils.tokenize(message)
-        test_vector = text_utils.vectorize_single(vocab_size, tokenized_msg, vocab_list, True)
+        test_vector = text_utils.vectorize_single(vocab_size, tokenized_msg, vocab_list, True, idf)
         heap = []
         scores = {}
         heapq.heapify_max(heap)
@@ -38,6 +39,10 @@ def predict_one(message):
         exp_scores = {k: math.exp(v - max_score) for k, v in scores.items()}
         total = sum(exp_scores.values())
         confidence = exp_scores[label] / total
+        
+        #Threshold that only shows a prediction of spam if it is really confident that it is a spam
+        if label == "spam" and confidence < 0.88:
+            label = "ham"
 
         return {"Classification": label, "Confidence": round(confidence, 4)}
     
@@ -51,7 +56,4 @@ def predict_multiple(messages):
         results.append(predict_one(message))
     
     return results
-
-
-print(predict_one("Hey your order shipped! Should arrive by Friday. Let me know if you need anything else."))
 
