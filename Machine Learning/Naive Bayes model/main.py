@@ -4,12 +4,14 @@ import classifier_model
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import os
 
 #sql alchemy to make edits to the database
 from sqlalchemy import create_engine, text
 
 #Connecting to spamshiled via connection string
-engine = create_engine("postgresql://postgres:postgreSQL%40123@localhost:5433/spamshield", echo=True)
+connection_string = os.getenv("CONNECTION_STRING")
+engine = create_engine(connection_string, echo=True)
 connection = engine.connect()
 
 #Making sure the input is a string
@@ -84,8 +86,8 @@ def predict_multiple(messages:BulkMessages = Body(description="Multiple messages
         VALUES(:message, :device_id, :confidence, :classification)"""), {
             "message": message,
             "device_id": messages.device_id,
-            "confidence": result["confidence"],
-            "classification": result["label"]
+            "confidence": result["Confidence"],
+            "classification": result["Classification"]
         })
         connection.commit()
     
@@ -111,11 +113,11 @@ def give_feedback(feedback: FeedbackMessage):
     connection.commit()
     return {"Feedback": "Feedback received, we apologise for the inconvenience"}
 
-@app.get("/predictions_today/{device_id}{previous}")\
+@app.get("/predictions_today/{device_id}/{today}")\
 
 #Obtains predictions for either today or previous days
 #Query parameter required determining if previous predictions should be returned or just today's
-def get_predictions(device_id: str, previous: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions")):
+def get_predictions(device_id: str, today: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions")):
     current_date= datetime.now().date()
     predictions = None
     #Only want predictions of the previous 90 days max (this number can be edited too)
@@ -123,7 +125,7 @@ def get_predictions(device_id: str, previous: bool = Path(description="A boolean
     #Each specific phone will only get their own predictions via the device_id filtering
 
     #Case where today's predictions must be retuned
-    if not previous:
+    if today:
         predictions = connection.execute(text("""SELECT message, classification, confidence, 
         "timestamp" FROM prediction WHERE DATE("timestamp") = :current_date 
         AND device_id = :device_id"""), 
@@ -228,7 +230,7 @@ def statistics(device_id:str):
     SELECT AVG(confidence) FROM prediction WHERE device_id = :device_id"""),
     {
         "device_id": device_id
-    })
+    }).scalar()
 
     #This is the average confidence score specifically for spam texts
     avg_confidence_spam = connection.execute((text("""
@@ -237,12 +239,12 @@ def statistics(device_id:str):
     {
         "device_id": device_id,
         "classification": "spam"
-    })
+    }).scalar()
 
     #Retrieves the number of feedback given per week
     num_feedback_given = connection.execute((text("""
     SELECT COUNT(*) FROM feedback JOIN prediction ON prediction.id = feedback.prediction_id
-    WHERE DATE("timestamp") >= DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id""")), 
+    WHERE DATE(feedback."timestamp") >= DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id""")), 
     {
         "device_id": device_id
     }).scalar()
