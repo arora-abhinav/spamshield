@@ -3,9 +3,11 @@ import heapq
 import math
 import text_utils
 from fastapi import HTTPException, status
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 global data
-with open("model_params.json") as params:
+with open(os.path.join(BASE_DIR, "model_params.json")) as params:
     data = json.load(params)
 
 class_ratio_map = data["Class ratios"]
