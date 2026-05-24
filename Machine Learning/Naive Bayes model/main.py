@@ -10,7 +10,8 @@ import os
 from sqlalchemy import create_engine, text
 
 #Connecting to spamshiled via connection string
-connection_string = os.getenv("CONNECTION_STRING")
+#os.getenv("DATABASE_URL") is specifically for Railway
+connection_string = os.getenv("CONNECTION_STRING") or os.getenv("DATABASE_URL")
 engine = create_engine(connection_string, echo=True)
 connection = engine.connect()
 
