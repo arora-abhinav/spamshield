@@ -9,6 +9,7 @@ import os
 #sql alchemy to make edits to the database
 from sqlalchemy import create_engine, text
 
+opt_in = False
 #Connecting to spamshiled via connection string
 #os.getenv("DATABASE_URL") is specifically for Railway
 connection_string = os.getenv("CONNECTION_STRING") or os.getenv("DATABASE_URL")
@@ -30,6 +31,8 @@ class BulkMessages(BaseModel):
 class FeedbackMessage(BaseModel):
     prediction_id: int
     actual: str
+    device_id: str
+    message:str
 
 app = FastAPI()
 
@@ -40,6 +43,28 @@ app.add_middleware(
     allow_headers = ['*']
 )
 
+#New endpoint to allow users to opt into sharing spam messages or not (no need to store ham messages
+#unless specified)
+@app.post("/allow_messages/{opt_in}/{device_id}")
+def allow_message_tracking(opt_in:bool, device_id):
+    connection.execute(text("INSERT INTO consent(opt_in, device_id) VALUES(:opt_in, :device_id"), 
+    {
+        "device_id": device_id,
+        "opt_in": opt_in
+    })
+
+    return {"Opted in": opt_in}
+
+@app.delete("/opt_out/{device_id}")
+def opt_out_message_tracking(device_id:str):
+    with engine.connect() as connection:
+        connection.execute(text("UPDATE consent SET opt_in = FALSE WHERE device_id = :device_id"), {
+            "device_id": device_id
+        })
+        connection.commit()
+    
+    return {"Result": "Opted out of future messages being stored"}
+
 #HTTP endpoint to make a single prediction
 @app.post("/predict")
 def predict_one(message:SingleMessage = Body(description="Single message as input into the model. Prediction will be ham or spam. Useful for new incoming messages")):
@@ -48,9 +73,8 @@ def predict_one(message:SingleMessage = Body(description="Single message as inpu
     score = data["Confidence"]
     #Not using formatted strings to prevent sql injections (protection against malicious input)
     connection.execute(text(""" 
-    INSERT INTO prediction(message, device_id, confidence, classification) 
-    VALUES(:message, :device_id, :confidence, :classification)"""), {
-        "message": message.message,
+    INSERT INTO prediction(device_id, confidence, classification) 
+    VALUES(:device_id, :confidence, :classification)"""), {
         "device_id": message.device_id,
         "confidence": score,
         "classification": prediction
@@ -83,9 +107,8 @@ def predict_multiple(messages:BulkMessages = Body(description="Multiple messages
         result["Time"] = current_time
         results.append(result)
         connection.execute(text(""" 
-        INSERT INTO prediction(message, device_id, confidence, classification) 
-        VALUES(:message, :device_id, :confidence, :classification)"""), {
-            "message": message,
+        INSERT INTO prediction(device_id, confidence, classification) 
+        VALUES(:device_id, :confidence, :classification)"""), {
             "device_id": messages.device_id,
             "confidence": result["Confidence"],
             "classification": result["Classification"]
@@ -106,16 +129,30 @@ def health():
 #A feedback endpoint: users report misclassified predictions here, associated with the device 
 @app.post("/feedback")
 def give_feedback(feedback: FeedbackMessage):
-    connection.execute((text("""
-    INSERT INTO feedback(prediction_id, actual) VALUES(:prediction_id, :actual)""")), {
-        "prediction_id": feedback.prediction_id,
-        "actual": feedback.actual
-    })
-    connection.commit()
+    with engine.connect() as connection:
+        consented = connection.execute(text("SELECT opt_in FROM consent WHERE :device_id = device_id"), {
+            "device_id":feedback.device_id
+        }).scalar()
+
+        if not consented:
+            connection.execute((text("""
+            INSERT INTO feedback(prediction_id, actual) VALUES(:prediction_id, :actual)""")), {
+                "prediction_id": feedback.prediction_id,
+                "actual": feedback.actual
+            })
+        else:
+            #Only storing false positives in the dataset to retrain 
+            if feedback.actual == "spam":
+                connection.execute((text("""
+                INSERT INTO feedback(message, prediction_id, actual) VALUES(:message, :prediction_id, :actual)""")), {
+                    "prediction_id": feedback.prediction_id,
+                    "actual": feedback.actual,
+                    "message": feedback.message
+                })
+        connection.commit()
     return {"Feedback": "Feedback received, we apologise for the inconvenience"}
 
-@app.get("/predictions_today/{device_id}/{today}")\
-
+@app.get("/predictions_today/{device_id}/{today}")
 #Obtains predictions for either today or previous days
 #Query parameter required determining if previous predictions should be returned or just today's
 def get_predictions(device_id: str, today: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions")):
