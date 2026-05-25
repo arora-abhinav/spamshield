@@ -4,6 +4,7 @@ import classifier_model
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from typing import Optional
 import os
 
 #sql alchemy to make edits to the database
@@ -32,7 +33,8 @@ class FeedbackMessage(BaseModel):
     prediction_id: int
     actual: str
     device_id: str
-    message:str
+    #We do NOT want to store missclassified
+    message:str = Optional[None]
 
 app = FastAPI()
 
@@ -64,6 +66,17 @@ def opt_out_message_tracking(device_id:str):
         connection.commit()
     
     return {"Result": "Opted out of future messages being stored"}
+
+#Separate endpoint that allows users to delete stored spam data
+@app.delete("/delete_stored_spam/{device_id}")
+def delete_spam(device_id: str):
+    with engine.connect() as connection:
+        connection.execute(text("DELETE FROM feedback WHERE device_id = :device_id"), {
+            "device_id": device_id
+        })
+    connection.commit()
+
+    return {"Result": "Deleted stored spam data."}
 
 #HTTP endpoint to make a single prediction
 @app.post("/predict")
@@ -141,14 +154,14 @@ def give_feedback(feedback: FeedbackMessage):
                 "actual": feedback.actual
             })
         else:
-            #Only storing false positives in the dataset to retrain 
-            if feedback.actual == "spam":
-                connection.execute((text("""
-                INSERT INTO feedback(message, prediction_id, actual) VALUES(:message, :prediction_id, :actual)""")), {
-                    "prediction_id": feedback.prediction_id,
-                    "actual": feedback.actual,
-                    "message": feedback.message
-                })
+            #Don't need to check for ham or spam since sending the message will be handled by the request body
+            #(Now feedback.message is optional)
+            connection.execute((text("""
+            INSERT INTO feedback(message, prediction_id, actual) VALUES(:message, :prediction_id, :actual)""")), {
+                "prediction_id": feedback.prediction_id,
+                "actual": feedback.actual,
+                "message": feedback.message
+            })
         connection.commit()
     return {"Feedback": "Feedback received, we apologise for the inconvenience"}
 
