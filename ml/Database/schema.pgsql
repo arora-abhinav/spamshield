@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS prediction(
     classification VARCHAR(4),
     confidence FLOAT,
     "timestamp" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    device_id VARCHAR(255)
+    device_id TEXT
 );
 
 --Table for containing feedback -> will be useful for retraining model
@@ -22,7 +22,14 @@ CREATE TABLE IF NOT EXISTS feedback(
 --Table for checking if user consent allows us to store messages for spam retraining and prediction
 CREATE TABLE IF NOT EXISTS consent(
     id SERIAL PRIMARY KEY,
-    device_id int UNIQUE NOT NULL,
+    device_id TEXT UNIQUE NOT NULL,
     CONSTRAINT fk_device FOREIGN KEY(device_id) REFERENCES prediction(device_id),
     opt_in BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS device_refresh_token(
+    id SERIAL PRIMARY KEY,
+    device_id TEXT NOT NULL
+    refresh_token TEXT NOT NULL
+    "timestamp" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

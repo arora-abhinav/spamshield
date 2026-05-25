@@ -8,12 +8,13 @@ from typing import Optional, Annotated
 import os
 from jose import jwt, JWTError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import uuid
 
 #sql alchemy to make edits to the database
 from sqlalchemy import create_engine, text
 
 #Secret Key and algorithm being used to encode our access token
-SECRET_KEY = "1b86362f4ad2ffae70c1fd84d25238473683739118a0b434c99b0cd359413849"
+SECRET_KEY = os.getenv("SECRET_KEY")
 ACCESS_TOKEN_EXPIRY_MINUTES = 30
 ALGORITHM = "HS256"
 
@@ -24,18 +25,12 @@ connection_string = os.getenv("CONNECTION_STRING") or os.getenv("DATABASE_URL")
 engine = create_engine(connection_string, echo=True)
 connection = engine.connect()
 
-security = HTTPBearer()
-
-#Making sure the input is an array of strings
-class BulkMessages(BaseModel):
-    messages: list[str]
-    device_id: str
+security = HTTPBearer(auto_error=True)
 
 #For reporting misclassified messages
 class FeedbackMessage(BaseModel):
     prediction_id: int
     actual: str
-    device_id: str
     #We do NOT want to store missclassified
     message:str = Optional[None]
 
@@ -49,8 +44,9 @@ app.add_middleware(
     allow_headers = ['*']
 )
 
-#Creating an access token in the form of JWT token
-def create_access_token(data:dict, expires_delta: timedelta):
+#A universal token (access or refresh) that has 2 parameters a dict and an expires_delta one.
+#To distinguish between the two, they can simply be assigned different parameters
+def create_token(data:dict, expires_delta: timedelta):
     to_encode = data.copy()
     #Saying that an access token will expire in expire delta minutes from now 
     expire = expires_delta + datetime.now()
@@ -58,7 +54,6 @@ def create_access_token(data:dict, expires_delta: timedelta):
     #Our access token will be a JWT
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, ALGORITHM)
     return encoded_jwt
-
 
 # A verify token that will be used to obtain and return the device_id
 #The HTTP bearer is a form of the Authorization Header that has "bearer token"
@@ -78,18 +73,19 @@ def verify_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(se
 
 #New endpoint to allow users to opt into sharing spam messages or not (no need to store ham messages
 #unless specified)
-@app.post("/allow_messages/{opt_in}/{device_id}")
-def allow_message_tracking(opt_in:bool, device_id:int):
-    connection.execute(text("INSERT INTO consent(opt_in, device_id) VALUES(:opt_in, :device_id"), 
-    {
-        "device_id": device_id,
-        "opt_in": opt_in
-    })
+@app.post("/allow_messages/{opt_in}")
+def allow_message_tracking(opt_in:bool, device_id = Depends(verify_token())):
+    with engine.connect() as connection:
+        connection.execute(text("INSERT INTO consent(opt_in, device_id) VALUES(:opt_in, :device_id"), 
+        {
+            "device_id": device_id,
+            "opt_in": opt_in
+        })
 
-    return {"Opted in": opt_in}
+        return {"Opted in": opt_in}
 
-@app.delete("/opt_out/{device_id}")
-def opt_out_message_tracking(device_id:str):
+@app.delete("/opt_out")
+def opt_out_message_tracking(device_id = Depends(verify_token())):
     with engine.connect() as connection:
         connection.execute(text("UPDATE consent SET opt_in = FALSE WHERE device_id = :device_id"), {
             "device_id": device_id
@@ -99,8 +95,8 @@ def opt_out_message_tracking(device_id:str):
     return {"Result": "Opted out of future messages being stored"}
 
 #Separate endpoint that allows users to delete stored spam data
-@app.delete("/delete_stored_spam/{device_id}")
-def delete_spam(device_id: str):
+@app.delete("/delete_stored_spam/")
+def delete_spam(device_id = Depends(verify_token())):
     with engine.connect() as connection:
         connection.execute(text("DELETE FROM feedback WHERE device_id = :device_id"), {
             "device_id": device_id
@@ -111,7 +107,7 @@ def delete_spam(device_id: str):
 
 #HTTP endpoint to make a single prediction
 @app.post("/predict")
-def predict_one(message:str = Body(description="Single message as input into the model. Prediction will be ham or spam. Useful for new incoming messages")):
+def predict_one(message:str = Body(description="Single message as input into the model. Prediction will be ham or spam. Useful for new incoming messages"), device_id = Depends(verify_token())):
     with engine.connect() as connection:
         data = classifier_model.predict_one(message.message)
         prediction = data["Classification"]
@@ -120,7 +116,7 @@ def predict_one(message:str = Body(description="Single message as input into the
         connection.execute(text(""" 
         INSERT INTO prediction(device_id, confidence, classification) 
         VALUES(:device_id, :confidence, :classification)"""), {
-            "device_id": message.device_id,
+            "device_id": device_id,
             "confidence": score,
             "classification": prediction
         })
@@ -136,28 +132,29 @@ def predict_one(message:str = Body(description="Single message as input into the
 
 #HTTP endpoint to make a bulk prediction -> This is only done once
 @app.post("/predict-multiple")
-def predict_multiple(messages:BulkMessages = Body(description="Multiple messages as an array input into the model. Predictions will be ham or spam, returned in the same order of messages. Useful for predicting previous messages")):
-    #Same logic as predict_one but just in a loop. Instead of calling predict_one endpoint multiple times, 
-    #just call the predict_one function in the classifier model multiple times through just one API call.
-    #This call will ONLY be made when the app is installed for the first time, and that's it. 
-    results = []
-    current_time = datetime.now()
-    for message in messages.messages:
-        result = classifier_model.predict_one(message)
-        #Adding current time since it wasn't natively returned
-        result["Time"] = current_time
-        results.append(result)
-        connection.execute(text(""" 
-        INSERT INTO prediction(device_id, confidence, classification) 
-        VALUES(:device_id, :confidence, :classification)"""), {
-            "device_id": messages.device_id,
-            "confidence": result["Confidence"],
-            "classification": result["Classification"]
-        })
-        connection.commit()
-    
+def predict_multiple(messages:list[str] = Body(description="Multiple messages as an array input into the model. Predictions will be ham or spam, returned in the same order of messages. Useful for predicting previous messages"), device_id = Depends(verify_token())):
+    with engine.connect() as connection:
+        #Same logic as predict_one but just in a loop. Instead of calling predict_one endpoint multiple times, 
+        #just call the predict_one function in the classifier model multiple times through just one API call.
+        #This call will ONLY be made when the app is installed for the first time, and that's it. 
+        results = []
+        current_time = datetime.now()
+        for message in messages:
+            result = classifier_model.predict_one(message)
+            #Adding current time since it wasn't natively returned
+            result["Time"] = current_time
+            results.append(result)
+            connection.execute(text(""" 
+            INSERT INTO prediction(device_id, confidence, classification) 
+            VALUES(:device_id, :confidence, :classification)"""), {
+                "device_id": device_id,
+                "confidence": result["Confidence"],
+                "classification": result["Classification"]
+            })
+            connection.commit()
+        
 
-    return {"Batch Predictions": results}
+        return {"Batch Predictions": results}
 
     #This will also return an HTTP exception automatically from the classifier_model.py script
 
@@ -169,10 +166,10 @@ def health():
 
 #A feedback endpoint: users report misclassified predictions here, associated with the device 
 @app.post("/feedback")
-def give_feedback(feedback: FeedbackMessage):
+def give_feedback(feedback: FeedbackMessage, device_id = Depends(verify_token())):
     with engine.connect() as connection:
         consented = connection.execute(text("SELECT opt_in FROM consent WHERE :device_id = device_id"), {
-            "device_id":feedback.device_id
+            "device_id":device_id
         }).scalar()
 
         if not consented:
@@ -191,156 +188,158 @@ def give_feedback(feedback: FeedbackMessage):
                 "message": feedback.message
             })
         connection.commit()
-    return {"Feedback": "Feedback received, we apologise for the inconvenience"}
+        return {"Feedback": "Feedback received, we apologise for the inconvenience"}
 
-@app.get("/predictions_today/{device_id}/{today}")
+@app.get("/predictions_today/{today}")
 #Obtains predictions for either today or previous days
 #Query parameter required determining if previous predictions should be returned or just today's
-def get_predictions(device_id: str, today: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions")):
-    current_date= datetime.now().date()
-    predictions = None
-    #Only want predictions of the previous 90 days max (this number can be edited too)
-    max_days = 90
-    #Each specific phone will only get their own predictions via the device_id filtering
+def get_predictions(today: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions"), device_id = Depends(verify_token())):
+    with engine.connect() as connection:
+        current_date= datetime.now().date()
+        predictions = None
+        #Only want predictions of the previous 90 days max (this number can be edited too)
+        max_days = 90
+        #Each specific phone will only get their own predictions via the device_id filtering
 
-    #Case where today's predictions must be retuned
-    if today:
-        predictions = connection.execute(text("""SELECT message, classification, confidence, 
-        "timestamp" FROM prediction WHERE DATE("timestamp") = :current_date 
-        AND device_id = :device_id"""), 
+        #Case where today's predictions must be retuned
+        if today:
+            predictions = connection.execute(text("""SELECT message, classification, confidence, 
+            "timestamp" FROM prediction WHERE DATE("timestamp") = :current_date 
+            AND device_id = :device_id"""), 
+            {
+            "current_date": current_date, 
+            "device_id":device_id
+            })
+        #Case where previous predictions must be returned
+        else:
+            predictions = connection.execute(text("""SELECT message, classification, confidence, 
+            "timestamp" FROM prediction WHERE DATE("timestamp") < :current_date 
+            AND device_id = :device_id AND DATE("timestamp") > 
+            :current_date - :max_days * INTERVAL '1 day' """), 
+            {
+            "current_date": current_date, 
+            "device_id":device_id,
+            "max_days": max_days
+            })
+        results = []
+        rows = predictions.fetchall()
+
+        for row in rows:
+            results.append({"Classification": row.classification, 
+                            "Confidence": row.confidence, 
+                            "Timestamp": row.timestamp, 
+                            "Message": row.message})
+
+
+        return {"Predictions": results}    
+
+@app.get("/statistics/")
+def statistics(device_id = Depends(verify_token())):
+    with engine.connect() as connection:
+        spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
+        classification = :classification AND device_id = :device_id"""), 
         {
-        "current_date": current_date, 
-        "device_id":device_id
-        })
-    #Case where previous predictions must be returned
-    else:
-        predictions = connection.execute(text("""SELECT message, classification, confidence, 
-        "timestamp" FROM prediction WHERE DATE("timestamp") < :current_date 
-        AND device_id = :device_id AND DATE("timestamp") > 
-        :current_date - :max_days * INTERVAL '1 day' """), 
+            "classification": "spam",
+            "device_id" : device_id
+        }).scalar()
+        ham_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
+        classification = :classification AND device_id = :device_id"""), 
         {
-        "current_date": current_date, 
-        "device_id":device_id,
-        "max_days": max_days
-        })
-    results = []
-    rows = predictions.fetchall()
+            "classification": "ham",
+            "device_id" : device_id
+        }).scalar()
+        total_messages = ham_count + spam_count
+        spam_percentage = (spam_count/total_messages) * 100 if total_messages > 0 else 0
 
-    for row in rows:
-        results.append({"Classification": row.classification, 
-                        "Confidence": row.confidence, 
-                        "Timestamp": row.timestamp, 
-                        "Message": row.message})
+        #Obtains the number of spam today
+        today_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
+        WHERE DATE(timestamp) = CURRENT_DATE AND device_id = :device_id 
+        AND classification = :classification"""), 
+        {
+            "device_id": device_id,
+            "classification": "spam"
 
+        }).scalar()
 
-    return {"Predictions": results}    
+        #Obtains the number of spam this week
+        week_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
+        WHERE DATE("timestamp") >= DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id 
+        AND classification = :classification"""), #DATE_TRUNC('week', CURRENT_DATE) is the week's Monday date
+        {
+            "device_id": device_id,
+            "classification": "spam"
 
-@app.get("/statistics/{device_id}")
-def statistics(device_id:str):
-    spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
-    classification = :classification AND device_id = :device_id"""), 
-    {
-        "classification": "spam",
-        "device_id" : device_id
-    }).scalar()
-    ham_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
-    classification = :classification AND device_id = :device_id"""), 
-    {
-        "classification": "ham",
-        "device_id" : device_id
-    }).scalar()
-    total_messages = ham_count + spam_count
-    spam_percentage = (spam_count/total_messages) * 100 if total_messages > 0 else 0
+        }).scalar()
 
-    #Obtains the number of spam today
-    today_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
-    WHERE DATE(timestamp) = CURRENT_DATE AND device_id = :device_id 
-    AND classification = :classification"""), 
-    {
-        "device_id": device_id,
-        "classification": "spam"
+        #Obtains the number of spam this month
+        month_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
+        WHERE DATE(timestamp) >= DATE_TRUNC('month', CURRENT_DATE) AND device_id = :device_id 
+        AND classification = :classification"""), #DATE_TRUNC('month', CURRENT_DATE) is the month's beginning day
+        {
+            "device_id": device_id,
+            "classification": "spam"
 
-    }).scalar()
+        }).scalar()
 
-    #Obtains the number of spam this week
-    week_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
-    WHERE DATE("timestamp") >= DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id 
-    AND classification = :classification"""), #DATE_TRUNC('week', CURRENT_DATE) is the week's Monday date
-    {
-        "device_id": device_id,
-        "classification": "spam"
+        #Will be used in bar chart showing the spam distribution per day for the week
+        weekly_spam_distribution = connection.execute(text("""
+        SELECT COUNT(*) AS "Count", DATE("timestamp") as "Date" FROM 
+        prediction WHERE DATE("timestamp") >= 
+        DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id 
+        AND classification = :classification GROUP BY DATE("timestamp") 
+        ORDER BY DATE("timestamp") DESC
+        """),
+        {
+            "device_id": device_id,
+            "classification": "spam"
 
-    }).scalar()
+        }).fetchall()
 
-    #Obtains the number of spam this month
-    month_spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction 
-    WHERE DATE(timestamp) >= DATE_TRUNC('month', CURRENT_DATE) AND device_id = :device_id 
-    AND classification = :classification"""), #DATE_TRUNC('month', CURRENT_DATE) is the month's beginning day
-    {
-        "device_id": device_id,
-        "classification": "spam"
+        weekly_spam_distribution_data = []
+        for row in weekly_spam_distribution:
+            weekly_spam_distribution_data.append(
+                {"Count": row.Count,
+                "Date": str(row.Date)
+                }
+            )
 
-    }).scalar()
+        #Obtaining average confidence score across all predictions 
+        avg_confidence_all = connection.execute(text("""
+        SELECT AVG(confidence) FROM prediction WHERE device_id = :device_id"""),
+        {
+            "device_id": device_id
+        }).scalar()
 
-    #Will be used in bar chart showing the spam distribution per day for the week
-    weekly_spam_distribution = connection.execute(text("""
-    SELECT COUNT(*) AS "Count", DATE("timestamp") as "Date" FROM 
-    prediction WHERE DATE("timestamp") >= 
-    DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id 
-    AND classification = :classification GROUP BY DATE("timestamp") 
-    ORDER BY DATE("timestamp") DESC
-    """),
-       {
-        "device_id": device_id,
-        "classification": "spam"
+        #This is the average confidence score specifically for spam texts
+        avg_confidence_spam = connection.execute((text("""
+        SELECT AVG(confidence) FROM prediction WHERE classification = :classification
+        AND device_id = :device_id""")),
+        {
+            "device_id": device_id,
+            "classification": "spam"
+        }).scalar()
 
-    }).fetchall()
+        #Retrieves the number of feedback given per week
+        num_feedback_given = connection.execute((text("""
+        SELECT COUNT(*) FROM feedback JOIN prediction ON prediction.id = feedback.prediction_id
+        WHERE DATE(feedback."timestamp") >= DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id""")), 
+        {
+            "device_id": device_id
+        }).scalar()
 
-    weekly_spam_distribution_data = []
-    for row in weekly_spam_distribution:
-        weekly_spam_distribution_data.append(
-            {"Count": row.Count,
-             "Date": str(row.Date)
-            }
-        )
-
-    #Obtaining average confidence score across all predictions 
-    avg_confidence_all = connection.execute(text("""
-    SELECT AVG(confidence) FROM prediction WHERE device_id = :device_id"""),
-    {
-        "device_id": device_id
-    }).scalar()
-
-    #This is the average confidence score specifically for spam texts
-    avg_confidence_spam = connection.execute((text("""
-    SELECT AVG(confidence) FROM prediction WHERE classification = :classification
-    AND device_id = :device_id""")),
-    {
-        "device_id": device_id,
-        "classification": "spam"
-    }).scalar()
-
-    #Retrieves the number of feedback given per week
-    num_feedback_given = connection.execute((text("""
-    SELECT COUNT(*) FROM feedback JOIN prediction ON prediction.id = feedback.prediction_id
-    WHERE DATE(feedback."timestamp") >= DATE_TRUNC('week', CURRENT_DATE) AND device_id = :device_id""")), 
-    {
-        "device_id": device_id
-    }).scalar()
-
-    return {
-        "Spam Count": spam_count,
-        "Ham Count": ham_count,
-        "Total Messages": total_messages,
-        "Spam Percentage": spam_percentage,
-        "Today Spam Count": today_spam_count,
-        "Week Spam Count": week_spam_count,
-        "Month Spam Count": month_spam_count,
-        "Weekly Spam Distribution": weekly_spam_distribution_data,
-        "Average Confidence All": avg_confidence_all,
-        "Average Confidence Spam": avg_confidence_spam,
-        "Feedback Count": num_feedback_given
-    }
+        return {
+            "Spam Count": spam_count,
+            "Ham Count": ham_count,
+            "Total Messages": total_messages,
+            "Spam Percentage": spam_percentage,
+            "Today Spam Count": today_spam_count,
+            "Week Spam Count": week_spam_count,
+            "Month Spam Count": month_spam_count,
+            "Weekly Spam Distribution": weekly_spam_distribution_data,
+            "Average Confidence All": avg_confidence_all,
+            "Average Confidence Spam": avg_confidence_spam,
+            "Feedback Count": num_feedback_given
+        }
 
 #An exception handler that catches anything else that isn't an HTTP exception
 @app.exception_handler(Exception)
@@ -350,3 +349,22 @@ async def handle_exception(request: Request, exception: Exception):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"message": "Oops, something went wrong. Please report to developper"},
     )
+
+#created the access and refresh tokens
+@app.post("regsiter")
+def register():
+    #device_id is a uuid (unique string)
+    device_id = str(uuid.uuid4())
+    access_token = create_token(data={"device_id": device_id, "type": "access"}, timedelta = timedelta(minutes=30))
+    refresh_token = create_token(data={"device_id": device_id, "type": "refresh"}, timedelta = timedelta(days=15))
+
+    with engine.connect() as connection:
+        connection.execute(text("""INSERT INTO device_refresh_token(device_id, refresh_token) 
+        VALUES(:device_id, refresh_token)"""), 
+        {"device_id": device_id, "refresh_token": refresh_token})
+
+        connection.commit()
+
+    #Returning both access_tokens and refresh_tokens to the client
+    return access_token, refresh_token
+
