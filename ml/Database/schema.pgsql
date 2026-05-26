@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS prediction(
 CREATE TABLE IF NOT EXISTS feedback(
     id SERIAL PRIMARY KEY,
     prediction_id INT,
-    message TEXT DEFAULT NULL
+    message TEXT DEFAULT NULL,
     actual varchar(4),
     --Creating the foreign key
     CONSTRAINT fk_prediction FOREIGN KEY(prediction_id) REFERENCES prediction(id),
@@ -22,14 +22,14 @@ CREATE TABLE IF NOT EXISTS feedback(
 --Table for checking if user consent allows us to store messages for spam retraining and prediction
 CREATE TABLE IF NOT EXISTS consent(
     id SERIAL PRIMARY KEY,
-    device_id TEXT UNIQUE NOT NULL,
-    CONSTRAINT fk_device FOREIGN KEY(device_id) REFERENCES prediction(device_id),
+    device_id TEXT NOT NULL,
     opt_in BOOLEAN DEFAULT FALSE
 );
 
+--Table for storing refresh tokens
 CREATE TABLE IF NOT EXISTS device_refresh_token(
     id SERIAL PRIMARY KEY,
-    device_id TEXT NOT NULL
-    refresh_token TEXT NOT NULL
+    device_id TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
     "timestamp" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

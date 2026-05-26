@@ -1,29 +1,25 @@
-from fastapi import FastAPI, Body, Path, Request, status, HTTPException, Header, Depends
+from fastapi import FastAPI, Body, Path, Request, status, Depends
 from pydantic import BaseModel
 import classifier_model
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import Optional, Annotated
+from typing import Optional
 import os
-from jose import jwt, JWTError
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import uuid
+from fastapi.security import HTTPBearer
+import auth
 
 #sql alchemy to make edits to the database
 from sqlalchemy import create_engine, text
+from database import engine
 
-#Secret Key and algorithm being used to encode our access token
-SECRET_KEY = os.getenv("SECRET_KEY")
-ACCESS_TOKEN_EXPIRY_MINUTES = 30
-ALGORITHM = "HS256"
 
+#Default parameter to see if the user allows to store the messages from spam classification
+#In feedback
 opt_in = False
 #Connecting to spamshiled via connection string
 #os.getenv("DATABASE_URL") is specifically for Railway
 connection_string = os.getenv("CONNECTION_STRING") or os.getenv("DATABASE_URL")
-engine = create_engine(connection_string, echo=True)
-connection = engine.connect()
 
 security = HTTPBearer(auto_error=True)
 
@@ -36,6 +32,8 @@ class FeedbackMessage(BaseModel):
 
 
 app = FastAPI()
+#Used to include the authorization functions that are now in a separate file
+app.include_router(auth.router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,58 +41,21 @@ app.add_middleware(
     allow_methods = ['*'],
     allow_headers = ['*']
 )
-
-#A universal token (access or refresh) that has 2 parameters a dict and an expires_delta one.
-#To distinguish between the two, they can simply be assigned different parameters
-def create_token(data:dict, expires_delta: timedelta):
-    to_encode = data.copy()
-    #Saying that an access token will expire in expire delta minutes from now 
-    expire = expires_delta + datetime.now()
-    to_encode.update({"exp": expire})
-    #Our access token will be a JWT
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, ALGORITHM)
-    return encoded_jwt
-
-# A verify token that will be used to obtain and return the device_id
-#The HTTP bearer is a form of the Authorization Header that has "bearer token"
-def verify_token(token_type: str):
-    #An auxilary verify function into which the token_type is "baked into" via closure
-    #Default values are evaluated once by fastAPI on startup so once verify_token is called at startup,
-    #All subsequent calls lead directly to auxilary_verify because that is its returned function
-    def auxilary_verify (credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]):
-        credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
-        #Could automatically raise an error if the .decode function cannot verify that the token
-        #contains the same decoded string as the signature
-        try:
-            payload = jwt.decode(credentials.credentials, SECRET_KEY, [ALGORITHM])
-            device_id = payload.get("device_id")
-            actual_token_type = payload.get("type")
-            if device_id is None or actual_token_type != token_type:
-                raise credential_exception
-
-            #Returning credentials.credentials for the refresh endpoint to verify if the refresh token
-            #exists in the first place
-            return device_id
-        except JWTError:
-            raise credential_exception
-    
-    return auxilary_verify
-
 #New endpoint to allow users to opt into sharing spam messages or not (no need to store ham messages
 #unless specified)
 @app.post("/allow_messages/{opt_in}")
-def allow_message_tracking(opt_in:bool, device_id = Depends(verify_token("access"))):
+def allow_message_tracking(opt_in:bool, device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
-        connection.execute(text("INSERT INTO consent(opt_in, device_id) VALUES(:opt_in, :device_id"), 
+        connection.execute(text("INSERT INTO consent(opt_in, device_id) VALUES(:opt_in, :device_id)"), 
         {
             "device_id": device_id,
             "opt_in": opt_in
         })
-
+        connection.commit()
         return {"Opted in": opt_in}
 
 @app.delete("/opt_out")
-def opt_out_message_tracking(device_id = Depends(verify_token("access"))):
+def opt_out_message_tracking(device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         connection.execute(text("UPDATE consent SET opt_in = FALSE WHERE device_id = :device_id"), {
             "device_id": device_id
@@ -105,43 +66,51 @@ def opt_out_message_tracking(device_id = Depends(verify_token("access"))):
 
 #Separate endpoint that allows users to delete stored spam data
 @app.delete("/delete_stored_spam/")
-def delete_spam(device_id = Depends(verify_token("access"))):
+def delete_spam(device_id = Depends(auth.verify_token("access"))):
+    row_count = 0
     with engine.connect() as connection:
-        connection.execute(text("DELETE FROM feedback WHERE device_id = :device_id"), {
-            "device_id": device_id
-        })
-    connection.commit()
+        result = connection.execute(text("""
+            UPDATE feedback SET message = NULL
+            WHERE prediction_id IN (
+                SELECT id FROM prediction WHERE device_id = :device_id)
+            AND message IS NOT NULL"""), {"device_id": device_id})
+        #Only spam messages are stored on the user's consent so message has to be not null
+        row_count = result.rowcount
+        connection.commit()
 
-    return {"Result": "Deleted stored spam data."}
+    if row_count > 0:
+        return {"Result": "Deleted stored spam data."}
+    return {"Result": "No data to delete"}
 
 #HTTP endpoint to make a single prediction
 @app.post("/predict")
-def predict_one(message:str = Body(description="Single message as input into the model. Prediction will be ham or spam. Useful for new incoming messages"), device_id = Depends(verify_token("access"))):
+def predict_one(message:str = Body(description="Single message as input into the model. Prediction will be ham or spam. Useful for new incoming messages"), device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
-        data = classifier_model.predict_one(message.message)
+        data = classifier_model.predict_one(message)
         prediction = data["Classification"]
         score = data["Confidence"]
         #Not using formatted strings to prevent sql injections (protection against malicious input)
-        connection.execute(text(""" 
+        prediction_id = connection.execute(text(""" 
         INSERT INTO prediction(device_id, confidence, classification) 
-        VALUES(:device_id, :confidence, :classification)"""), {
+        VALUES(:device_id, :confidence, :classification) RETURNING id"""), {
             "device_id": device_id,
             "confidence": score,
             "classification": prediction
-        })
+        }).scalar()
         connection.commit()
 
         current_time = datetime.now()
         return {
             "Classification" : prediction,
             "Confidence": score,
-            "Time": current_time
+            "Time": current_time,
+            "Prediction ID": prediction_id
         }
     #This will also return an HTTP exception automatically from the classifier_model.py script
 
 #HTTP endpoint to make a bulk prediction -> This is only done once
 @app.post("/predict-multiple")
-def predict_multiple(messages:list[str] = Body(description="Multiple messages as an array input into the model. Predictions will be ham or spam, returned in the same order of messages. Useful for predicting previous messages"), device_id = Depends(verify_token("access"))):
+def predict_multiple(messages:list[str] = Body(description="Multiple messages as an array input into the model. Predictions will be ham or spam, returned in the same order of messages. Useful for predicting previous messages"), device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         #Same logic as predict_one but just in a loop. Instead of calling predict_one endpoint multiple times, 
         #just call the predict_one function in the classifier model multiple times through just one API call.
@@ -152,14 +121,15 @@ def predict_multiple(messages:list[str] = Body(description="Multiple messages as
             result = classifier_model.predict_one(message)
             #Adding current time since it wasn't natively returned
             result["Time"] = current_time
-            results.append(result)
-            connection.execute(text(""" 
+            prediction_id = connection.execute(text(""" 
             INSERT INTO prediction(device_id, confidence, classification) 
-            VALUES(:device_id, :confidence, :classification)"""), {
+            VALUES(:device_id, :confidence, :classification) RETURNING id""" ), {
                 "device_id": device_id,
                 "confidence": result["Confidence"],
                 "classification": result["Classification"]
-            })
+            }).scalar()
+            result["Prediction ID"] = prediction_id
+            results.append(result)
             connection.commit()
         
 
@@ -175,7 +145,7 @@ def health():
 
 #A feedback endpoint: users report misclassified predictions here, associated with the device 
 @app.post("/feedback")
-def give_feedback(feedback: FeedbackMessage, device_id = Depends(verify_token("access"))):
+def give_feedback(feedback: FeedbackMessage, device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         consented = connection.execute(text("SELECT opt_in FROM consent WHERE :device_id = device_id"), {
             "device_id":device_id
@@ -202,7 +172,7 @@ def give_feedback(feedback: FeedbackMessage, device_id = Depends(verify_token("a
 @app.get("/predictions_today/{today}")
 #Obtains predictions for either today or previous days
 #Query parameter required determining if previous predictions should be returned or just today's
-def get_predictions(today: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions"), device_id = Depends(verify_token("access"))):
+def get_predictions(today: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions"), device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         current_date= datetime.now().date()
         predictions = None
@@ -243,7 +213,7 @@ def get_predictions(today: bool = Path(description="A boolean flag to retrieve t
         return {"Predictions": results}    
 
 @app.get("/statistics/")
-def statistics(device_id = Depends(verify_token("access"))):
+def statistics(device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
         classification = :classification AND device_id = :device_id"""), 
@@ -358,50 +328,3 @@ async def handle_exception(request: Request, exception: Exception):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"message": "Oops, something went wrong. Please report to developper"},
     )
-
-#created the access and refresh tokens
-@app.post("/register")
-def register():
-    #device_id is a uuid (unique string)
-    device_id = str(uuid.uuid4())
-    access_token = create_token(data={"device_id": device_id, "type": "access"}, expires_delta = timedelta(minutes=30))
-    refresh_token = create_token(data={"device_id": device_id, "type": "refresh"}, expires_delta = timedelta(days=15))
-
-    with engine.connect() as connection:
-        connection.execute(text("""INSERT INTO device_refresh_token(device_id, refresh_token) 
-        VALUES(:device_id, :refresh_token)"""), 
-        {"device_id": device_id, "refresh_token": refresh_token})
-
-        connection.commit()
-
-    #Returning both access_tokens and refresh_tokens to the client
-    return {"refresh_token": refresh_token, "access_token": access_token}
-
-#This is when the access token expires
-@app.post("/refresh")
-def refresh(device_id = Depends(verify_token("refresh"))):
-    credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
-    with engine.connect() as connection:
-        #Deleting the associated refresh token
-
-        exists = connection.execute(text("""
-        SELECT refresh_token FROM device_refresh_token where device_id = :device_id
-        """), {"device_id": device_id}).scalar() 
-        if exists is None:
-            raise credential_exception
-        
-        connection.execute(text("""
-        DELETE FROM device_refresh_token WHERE device_id = :device_id
-        """), {"device_id": device_id})
-
-        #Not calling register internally since a device_id is also generated, which we don't want
-        access_token = create_token(data={"device_id": device_id, "type": "access"}, expires_delta= timedelta(minutes=30))
-        refresh_token = create_token(data={"device_id": device_id, "type": "refresh"}, expires_delta = timedelta(days=15))
-
-        connection.execute(text("""INSERT INTO device_refresh_token(device_id, refresh_token) 
-        VALUES(:device_id, :refresh_token)"""), 
-        {"device_id": device_id, "refresh_token": refresh_token})
-
-        connection.commit()
-        #Returning the new access_token to the client
-        return {"refresh_token": refresh_token, "access_token": access_token}
