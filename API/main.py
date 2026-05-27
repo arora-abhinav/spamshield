@@ -22,8 +22,18 @@ opt_in = False
 #os.getenv("DATABASE_URL") is specifically for Railway
 connection_string = os.getenv("CONNECTION_STRING") or os.getenv("DATABASE_URL")
 
-security = HTTPBearer(auto_error=True)
+#A startup event to create tables 
+@asynccontextmanager
+async def create_tables(app):
+    with engine.connect() as connection:
+        with open("schema.pgsql", "r") as f:
+            queries = f.read()
+        connection.connection.cursor().execute(queries)
+        connection.commit()
+    yield
 
+security = HTTPBearer(auto_error=True)
+app = FastAPI(lifespan=create_tables)
 #For reporting misclassified messages
 class FeedbackMessage(BaseModel):
     prediction_id: int
@@ -41,18 +51,6 @@ app.add_middleware(
     allow_methods = ['*'],
     allow_headers = ['*']
 )
-
-#A startup event to create tables 
-@asynccontextmanager
-async def create_tables(app):
-    with engine.connect() as connection:
-        with open("schema.pgsql", "r") as f:
-            queries = f.read()
-        connection.connection.cursor().execute(queries)
-        connection.commit()
-    yield
-
-app = FastAPI(lifespan=create_tables)
 
 #New endpoint to allow users to opt into sharing spam messages or not (no need to store ham messages
 #unless specified)
