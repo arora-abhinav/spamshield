@@ -22,23 +22,8 @@ opt_in = False
 #os.getenv("DATABASE_URL") is specifically for Railway
 connection_string = os.getenv("CONNECTION_STRING") or os.getenv("DATABASE_URL")
 
-#A startup event to create tables 
-@asynccontextmanager
-async def create_tables(app):
-    print("Creating tables...")
-    try:
-        with engine.connect() as connection:
-            with open("schema.pgsql", "r") as f:
-                queries = f.read()
-            connection.connection.cursor().execute(queries)
-            connection.commit()
-        print("Tables created successfully")
-    except Exception as e:
-        print(f"Error creating tables: {e}")
-    yield
-
 security = HTTPBearer(auto_error=True)
-app = FastAPI(lifespan=create_tables)
+app = FastAPI()
 #For reporting misclassified messages
 class FeedbackMessage(BaseModel):
     prediction_id: int
