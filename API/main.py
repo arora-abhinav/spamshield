@@ -46,13 +46,13 @@ app.add_middleware(
 #A startup event to create tables 
 @asynccontextmanager
 async def create_tables():
-    with open("schema.pgsql", "r") as schema:
-        querries = schema.read()
     with engine.connect() as connection:
-        connection.execute(text(querries))
-        connection.commit()
+        with open("schema.pgsql", "r") as schema:
+            querries = schema.read()
+            connection.execute(text(querries))
+            connection.commit()
     yield
-    
+
 #New endpoint to allow users to opt into sharing spam messages or not (no need to store ham messages
 #unless specified)
 @app.post("/allow_messages/{opt_in}")
