@@ -6,6 +6,9 @@ WORKDIR /app
 #Copies requirements.txt from current directory to container directory
 COPY requirements.txt .
 
+#Copies the schema so main.py can read this on startup
+COPY schema.pgsql .
+
 #Installs all dependancies required onto the image 
 RUN pip install -r requirements.txt
 

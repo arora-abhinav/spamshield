@@ -8,6 +8,7 @@ from typing import Optional
 import os
 from fastapi.security import HTTPBearer
 import auth
+from contextlib import asynccontextmanager
 
 #sql alchemy to make edits to the database
 from sqlalchemy import create_engine, text
@@ -41,6 +42,17 @@ app.add_middleware(
     allow_methods = ['*'],
     allow_headers = ['*']
 )
+
+#A startup event to create tables 
+@asynccontextmanager
+async def create_tables():
+    with open("schema.pgsql", "r") as schema:
+        querries = schema.read()
+    with engine.connect() as connection:
+        connection.execute(text(querries))
+        connection.commit()
+    yield
+    
 #New endpoint to allow users to opt into sharing spam messages or not (no need to store ham messages
 #unless specified)
 @app.post("/allow_messages/{opt_in}")
