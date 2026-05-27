@@ -1,20 +1,20 @@
 # SpamShield — SMS Spam Detector
 
-An end-to-end Android application that classifies incoming SMS messages as spam or ham in real time using a from-scratch Multinomial Naive Bayes classifier served via a containerized FastAPI backend.
+An end-to-end Android application that classifies incoming SMS messages as spam or ham in real time using a from-scratch Multinomial Naive Bayes classifier served via a containerized FastAPI backend deployed on Railway.
 
 ---
 
 ## Project Status
 
-- ✅ **Complete:** Dataset combination + synthetic augmentation
+- ✅ **Complete:** Dataset curation + synthetic augmentation
 - ✅ **Complete:** Multinomial Naive Bayes — trained, evaluated, serialized to JSON
-- ✅ **Complete:** FastAPI backend with `/predict`, `/predict-multiple`, `/health` endpoints
-- ✅ **Complete:** Docker containerization
-- ✅ **Complete:** Database schema design + ERD
-- 🟡 **In Progress:** Docker Compose + PostgreSQL integration
-- 🔲 **Planned:** Redis caching
-- 🔲 **Planned:** Railway deployment
-- 🔲 **Planned:** Android app
+- ✅ **Complete:** FastAPI backend with full REST API
+- ✅ **Complete:** JWT authentication with access/refresh token rotation
+- ✅ **Complete:** Privacy-first database schema with user consent system
+- ✅ **Complete:** Docker containerization + Docker Compose local orchestration
+- ✅ **Complete:** Railway deployment (FastAPI + PostgreSQL)
+- 🔲 **Planned:** Android app (Kotlin + Jetpack Compose)
+- 🔲 **Planned:** Google Play Store submission
 
 ---
 
@@ -22,14 +22,12 @@ An end-to-end Android application that classifies incoming SMS messages as spam 
 
 | Metric | Score |
 |---|---|
-| Accuracy | 94.8% |
-| Spam Precision | 0.93 |
-| Spam Recall | 0.97 |
-| Ham Precision | 0.97 |
-| Ham Recall | 0.92 |
-| F1 Score | 0.95 |
+| Training Accuracy | 94.32% |
+| F1 Score (real-world) | 0.918 |
+| Vocabulary Size | 20,000 |
+| Classification Threshold | 0.88 |
 
-Evaluated on 3,360 held-out test examples (80/20 train/test split).
+Evaluated on a 97-message real-world test set. Training set: 18,392 examples (9,662 spam / 8,730 ham).
 
 ---
 
@@ -37,12 +35,12 @@ Evaluated on 3,360 held-out test examples (80/20 train/test split).
 
 ```
 Android App (Kotlin + Jetpack Compose)
-        ↓
+        ↓  JWT Bearer Token
 FastAPI (Railway)
-        ↓              ↓
-Redis Cache     PostgreSQL (prediction history + feedback)
         ↓
-Multinomial Naive Bayes (from scratch)
+PostgreSQL (Railway)
+        ↓
+Multinomial Naive Bayes (from scratch, TF-IDF)
 ```
 
 ---
@@ -51,46 +49,83 @@ Multinomial Naive Bayes (from scratch)
 
 **Algorithm:** Multinomial Naive Bayes — implemented from scratch without any ML libraries
 
-**Training Data — 16,796 examples across 4 sources:**
+**Training Data — 18,392 examples across multiple sources:**
 - UCI SMS Spam Collection
 - SMS Smishing Collection (Kaggle)
-- SMS Spam Dataset 10,286 rows (Kaggle)
-- Synthetic augmentation via Claude API — delivery scams, bank alerts, OTP scams, prize scams, government impersonation, phishing links, job scams, crypto scams
+- SMS Spam Dataset (Kaggle)
+- Targeted synthetic ham: delivery notifications, OTPs, flight alerts, academic messages, account alerts (Gemini)
+- Targeted synthetic spam: phishing, prize scams, KYC fraud, job scams, crypto scams (Gemini, GPT, DeepSeek)
 
 **Preprocessing Pipeline:**
 - Lowercase normalization
 - Punctuation and special character removal
-- Top 10,000 token vocabulary by frequency
-- Word count vectorization (Multinomial)
+- Top 20,000 token vocabulary by frequency (grid searched: 10k → 25k)
+- TF-IDF feature weighting
 - Laplace smoothing (+1 numerator, +vocab_size denominator)
-- Rare token filtering — tokens appearing fewer than 3 times removed
 - Stopwords preserved — "you", "your", "now" are informative spam signals
 - Log space evaluation throughout to prevent numerical underflow
 
 ---
 
+## Privacy Architecture
+
+SpamShield is built with a privacy-first approach:
+
+- **No message content is stored server-side** without explicit user consent
+- The `prediction` table stores only classification metadata — never the SMS text
+- Message text stays on the device, stored locally in Android Room database
+- Users can opt in to share confirmed spam examples for model retraining
+- Users can opt out at any time and request deletion of stored data
+- Compliant with DPDPA 2023 (India's Digital Personal Data Protection Act)
+
+---
+
 ## Database Schema
 
-See [`docs/erd.png`](docs/erd.png) for the full Entity Relationship Diagram.
-
-**predictions**
+**prediction**
 | Column | Type | Notes |
 |---|---|---|
 | id | SERIAL | Primary key |
-| message | TEXT | Raw SMS text |
-| classification | VARCHAR(4) | spam or ham |
+| classification | VARCHAR(4) | `spam` or `ham` |
 | confidence | FLOAT | Model confidence score |
-| device_id | VARCHAR(255) | Unique per device |
+| device_id | TEXT | Unique per device |
 | timestamp | TIMESTAMP | Auto set on insert |
 
 **feedback**
 | Column | Type | Notes |
 |---|---|---|
 | id | SERIAL | Primary key |
-| classification | VARCHAR(4) | What model predicted |
-| actual | VARCHAR(4) | What user reported |
-| message_id | INT | Foreign key → predictions.id |
+| prediction_id | INT | Foreign key → prediction.id |
+| message | TEXT | NULL unless user opted in AND actual == spam |
+| actual | VARCHAR(4) | User-reported correct label |
 | timestamp | TIMESTAMP | Auto set on insert |
+
+**consent**
+| Column | Type | Notes |
+|---|---|---|
+| id | SERIAL | Primary key |
+| device_id | TEXT | Unique per device |
+| opt_in | BOOLEAN | Default false |
+
+**device_refresh_token**
+| Column | Type | Notes |
+|---|---|---|
+| id | SERIAL | Primary key |
+| device_id | TEXT | Unique per device |
+| refresh_token | TEXT | JWT refresh token |
+| timestamp | TIMESTAMP | Auto set on insert |
+
+---
+
+## Authentication
+
+SpamShield uses **JWT-based anonymous device authentication** — no username or password required.
+
+- On first launch, the app calls `POST /register` to receive an access token and refresh token
+- All protected endpoints require `Authorization: Bearer <access_token>` header
+- Access tokens expire after 30 minutes; refresh tokens expire after 15 days
+- Refresh token rotation on every `/refresh` call — old tokens are invalidated immediately
+- Device IDs are server-generated UUIDs — clients cannot spoof another device's identity
 
 ---
 
@@ -100,17 +135,42 @@ See [`docs/erd.png`](docs/erd.png) for the full Entity Relationship Diagram.
 |---|---|
 | FastAPI | REST API framework |
 | Pydantic | Request/response validation |
-| Redis | Prediction caching (24hr TTL) |
-| PostgreSQL | Prediction history + user feedback |
+| SQLAlchemy | Database ORM |
+| PostgreSQL | Prediction history, feedback, consent |
+| python-jose | JWT token generation and verification |
 | Docker | Containerization |
 | Docker Compose | Local orchestration |
+| Railway | Cloud deployment |
 
-**API Endpoints:**
+---
+
+## API Endpoints
+
+**Auth (no token required)**
 ```
-POST /predict          — classify a single message
-POST /predict-multiple — classify multiple messages
-GET  /predictions      — prediction history
-GET  /health           — health check
+POST /register          — generate device ID, return access + refresh tokens
+POST /refresh           — exchange refresh token for new token pair
+```
+
+**Predictions (access token required)**
+```
+POST /predict           — classify a single message
+POST /predict-multiple  — classify multiple messages (used on first app install)
+GET  /predictions_today/{today} — retrieve today's or previous predictions
+GET  /statistics        — spam counts, percentages, weekly distribution, confidence averages
+```
+
+**Feedback & Consent (access token required)**
+```
+POST /feedback                  — report a misclassified message
+POST /allow_messages/{opt_in}   — register consent preference
+DELETE /opt_out                 — opt out of future message storage
+DELETE /delete_stored_spam      — delete all stored spam messages (GDPR/DPDPA)
+```
+
+**Public**
+```
+GET /health             — server status and model load check
 ```
 
 ---
@@ -119,66 +179,64 @@ GET  /health           — health check
 
 | Service | Technology |
 |---|---|
-| Deployment | Railway |
-| Database | PostgreSQL (Docker / Railway) |
-| Cache | Redis (Docker / Railway) |
+| Deployment | Railway (Hobby plan) |
+| Database | PostgreSQL (Railway managed) |
+| Containerization | Docker |
 
 ---
 
-## Android App
+## Android App (Planned)
 
 **Tech Stack:**
 | Technology | Purpose |
 |---|---|
 | Kotlin | Primary language |
 | Jetpack Compose | Declarative UI |
-| Retrofit | HTTP client |
-| Room | Local SQLite cache |
+| Retrofit | HTTP client + JWT interceptor |
+| Room | Local SQLite — stores message text + prediction IDs |
 | ViewModel | UI state management |
 | Hilt | Dependency injection |
+| EncryptedSharedPreferences | Secure token storage |
 
-**Features:**
-- Intercepts incoming SMS via Android background service
-- Real time spam classification
-- Silent for ham, "⚠️ Spam detected" notification for spam
-- Prediction history with confidence scores
+**Planned Features:**
+- Intercepts incoming SMS via Android BroadcastReceiver
+- Real-time spam classification with confidence-based colour coding (green/yellow/red)
+- Silent for ham, notification for spam
+- Prediction history with local message text
 - User feedback — mark incorrect classifications
-- Works offline for previously classified messages
+- Consent management UI
+- Works offline using local Room database
 
 ---
 
-## Hybrid Detection Flow
+## Local Development
 
-```
-Message arrives
-        ↓
-Check Redis cache (hash of message)
-        ↓ cache miss
-Run Multinomial Naive Bayes
-        ↓
-Store result in PostgreSQL
-        ↓
-Cache result in Redis (24hr TTL)
-        ↓
-Return prediction + confidence score
+```bash
+# Clone the repo
+git clone https://github.com/arora-abhinav/spamshield
+
+# Start services
+docker compose up --build
+
+# API available at http://localhost:8000
+# Swagger UI at http://localhost:8000/docs
 ```
 
 ---
 
-## Implementation Roadmap
+## Known Limitations
 
-- ✅ Week 1 — Dataset combination + synthetic augmentation + model training
-- 🟡 Week 2 — Docker Compose + PostgreSQL + Redis integration
-- 🔲 Week 3 — Railway deployment
-- 🔲 Week 4-5 — Kotlin + Jetpack Compose basics
-- 🔲 Week 6-7 — Android app development
-- 🔲 Week 8 — Polish + Google Play publish
+- Test set (97 messages) is too small for statistically significant accuracy claims — cross-validation on full dataset is planned
+- Synthetic training data may not fully capture real-world Indian SMS spam patterns
+- Jio/Airtel transactional messages occasionally misclassified as spam (false positives)
+- No rate limiting implemented yet
+- No model versioning or automated retraining pipeline
 
 ---
 
 ## Related Projects
 
-- **[bare-metal-ml](link)** — classical ML algorithms implemented from scratch in Python and C++
+- **[bare-metal-ml](link)** — classical ML algorithms implemented from scratch in Python
 
 ---
 
