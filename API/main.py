@@ -58,9 +58,15 @@ def allow_message_tracking(opt_in:bool, device_id = Depends(auth.verify_token("a
 @app.delete("/opt_out")
 def opt_out_message_tracking(device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
-        connection.execute(text("UPDATE consent SET opt_in = FALSE WHERE device_id = :device_id"), {
-            "device_id": device_id
-        })
+        consent_status = connection.execute(text("""SELECT opt_in FROM consent WHERE 
+        device_id = :device_id"""), {"device_id" : device_id}).scalar()
+
+        if consent_status:
+            connection.execute(text("UPDATE consent SET opt_in = FALSE WHERE device_id = :device_id"), {
+                "device_id": device_id
+            })
+        else:
+            return {"Result": "Already opted out"}
         connection.commit()
     
     return {"Result": "Opted out of future messages being stored"}
