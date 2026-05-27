@@ -32,7 +32,6 @@ class FeedbackMessage(BaseModel):
     message:str = Optional[None]
 
 
-app = FastAPI()
 #Used to include the authorization functions that are now in a separate file
 app.include_router(auth.router)
 
@@ -45,13 +44,15 @@ app.add_middleware(
 
 #A startup event to create tables 
 @asynccontextmanager
-async def create_tables():
+async def create_tables(app):
     with engine.connect() as connection:
-        with open("schema.pgsql", "r") as schema:
-            querries = schema.read()
-            connection.execute(text(querries))
-            connection.commit()
+        with open("schema.pgsql", "r") as f:
+            queries = f.read()
+        connection.connection.cursor().execute(queries)
+        connection.commit()
     yield
+
+app = FastAPI(lifespan=create_tables)
 
 #New endpoint to allow users to opt into sharing spam messages or not (no need to store ham messages
 #unless specified)
