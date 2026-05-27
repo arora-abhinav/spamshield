@@ -25,11 +25,16 @@ connection_string = os.getenv("CONNECTION_STRING") or os.getenv("DATABASE_URL")
 #A startup event to create tables 
 @asynccontextmanager
 async def create_tables(app):
-    with engine.connect() as connection:
-        with open("schema.pgsql", "r") as f:
-            queries = f.read()
-        connection.connection.cursor().execute(queries)
-        connection.commit()
+    print("Creating tables...")
+    try:
+        with engine.connect() as connection:
+            with open("schema.pgsql", "r") as f:
+                queries = f.read()
+            connection.connection.cursor().execute(queries)
+            connection.commit()
+        print("Tables created successfully")
+    except Exception as e:
+        print(f"Error creating tables: {e}")
     yield
 
 security = HTTPBearer(auto_error=True)
