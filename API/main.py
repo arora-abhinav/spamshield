@@ -29,7 +29,7 @@ class FeedbackMessage(BaseModel):
     prediction_id: int
     actual: str
     #We do NOT want to store missclassified
-    message:str = Optional[None]
+    message: Optional[str] = None
 
 
 #Used to include the authorization functions that are now in a separate file
@@ -189,7 +189,7 @@ def get_predictions(today: bool = Path(description="A boolean flag to retrieve t
 
         #Case where today's predictions must be retuned
         if today:
-            predictions = connection.execute(text("""SELECT message, classification, confidence, 
+            predictions = connection.execute(text("""SELECT classification, confidence, 
             "timestamp" FROM prediction WHERE DATE("timestamp") = :current_date 
             AND device_id = :device_id"""), 
             {
@@ -198,7 +198,7 @@ def get_predictions(today: bool = Path(description="A boolean flag to retrieve t
             })
         #Case where previous predictions must be returned
         else:
-            predictions = connection.execute(text("""SELECT message, classification, confidence, 
+            predictions = connection.execute(text("""SELECT classification, confidence, 
             "timestamp" FROM prediction WHERE DATE("timestamp") < :current_date 
             AND device_id = :device_id AND DATE("timestamp") > 
             :current_date - :max_days * INTERVAL '1 day' """), 
@@ -213,8 +213,7 @@ def get_predictions(today: bool = Path(description="A boolean flag to retrieve t
         for row in rows:
             results.append({"Classification": row.classification, 
                             "Confidence": row.confidence, 
-                            "Timestamp": row.timestamp, 
-                            "Message": row.message})
+                            "Timestamp": row.timestamp})
 
 
         return {"Predictions": results}    

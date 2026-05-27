@@ -21,9 +21,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgreSQL@123
       POSTGRES_DB: postgres
-    
+        
     volumes:
-      - ./ml/Database/schema.pgsql:/docker-entrypoint-initdb.d/schema.sql
+      - ./API/schema.pgsql:/docker-entrypoint-initdb.d/schema.sql
       - postgres_data:/var/lib/postgresql/data
 
 volumes:
