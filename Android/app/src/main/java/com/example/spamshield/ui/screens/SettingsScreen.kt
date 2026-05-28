@@ -1,25 +1,28 @@
 package com.example.spamshield.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,14 +32,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.spamshield.token.TokenManager
+import com.example.spamshield.ui.theme.DarkBackground
+import com.example.spamshield.ui.theme.DarkSurface
+import com.example.spamshield.ui.theme.HamGreen
+import com.example.spamshield.ui.theme.SpamRed
+import com.example.spamshield.ui.theme.TextSecondary
 import com.example.spamshield.ui.viewmodel.SpamShieldViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: SpamShieldViewModel) {
     val context = LocalContext.current
@@ -60,67 +69,115 @@ fun SettingsScreen(viewModel: SpamShieldViewModel) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Settings") }) },
+        containerColor = DarkBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         Column(
-            modifier = Modifier.padding(innerPadding).fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .background(DarkBackground)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = "Device ID", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 4.dp)
+            )
+
+            // Device ID
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(text = "Device ID", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                     Text(
                         text = TokenManager.getDeviceId(context) ?: "Not registered",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Share spam messages for training", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                text = "Only confirmed spam messages will be sent to improve the model.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = optedIn,
-                            onCheckedChange = { viewModel.setConsent(it) },
-                            enabled = !isLoading
+            // Consent toggle
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "Share spam messages for training",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Only confirmed spam messages will be sent to improve the model.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
                         )
                     }
+                    Switch(
+                        checked = optedIn,
+                        onCheckedChange = { viewModel.setConsent(it) },
+                        enabled = !isLoading,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = HamGreen,
+                            uncheckedThumbColor = TextSecondary,
+                            uncheckedTrackColor = Color(0xFF2A2A42)
+                        )
+                    )
                 }
             }
 
-            HorizontalDivider()
-
+            // Delete button
             Button(
                 onClick = { showDeleteDialog = true },
                 enabled = !isLoading,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth()
+                colors = ButtonDefaults.buttonColors(containerColor = SpamRed),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                Text("Delete All Stored Spam")
+                Text(
+                    text = "Delete All Stored Spam",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(text = "Privacy", style = MaterialTheme.typography.titleSmall)
+            // Privacy notice
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Message text is stored locally only. The server only receives classification metadata unless you opt in to sharing spam messages.",
+                        text = "Privacy Notice",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Message text is stored locally only. The server only receives classification metadata unless you opt in to sharing spam messages for model improvement.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
+                        color = TextSecondary
                     )
                 }
             }
@@ -130,18 +187,19 @@ fun SettingsScreen(viewModel: SpamShieldViewModel) {
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Stored Spam?") },
-            text = { Text("This will delete all spam messages stored on the server. This cannot be undone.") },
+            containerColor = DarkSurface,
+            title = { Text("Delete Stored Spam?", color = Color.White) },
+            text = { Text("This will delete all spam messages stored on the server. This cannot be undone.", color = TextSecondary) },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteStoredSpam()
-                        showDeleteDialog = false
-                    }
-                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = {
+                    viewModel.deleteStoredSpam()
+                    showDeleteDialog = false
+                }) { Text("Delete", color = SpamRed, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
             }
         )
     }

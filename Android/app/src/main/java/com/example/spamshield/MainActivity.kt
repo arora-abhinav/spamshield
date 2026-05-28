@@ -18,16 +18,24 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.spamshield.ui.navigation.SpamShieldNavGraph
+import com.example.spamshield.ui.theme.DarkBackground
+import com.example.spamshield.ui.theme.DarkSurface
+import com.example.spamshield.ui.theme.SpamRed
 import com.example.spamshield.ui.theme.SpamshieldTheme
+import com.example.spamshield.ui.theme.TextSecondary
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -50,6 +58,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
+                    containerColor = DarkBackground,
                     bottomBar = { BottomNavBar(navController = navController) }
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
@@ -66,7 +75,7 @@ private fun BottomNavBar(navController: NavController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    data class NavItem(val route: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String)
+    data class NavItem(val route: String, val icon: ImageVector, val label: String)
 
     val items = listOf(
         NavItem("home", Icons.Filled.Home, "Home"),
@@ -75,10 +84,14 @@ private fun BottomNavBar(navController: NavController) {
         NavItem("settings", Icons.Filled.Settings, "Settings")
     )
 
-    NavigationBar {
+    NavigationBar(
+        containerColor = DarkSurface,
+        contentColor = Color.White
+    ) {
         items.forEach { item ->
+            val selected = currentRoute == item.route
             NavigationBarItem(
-                selected = currentRoute == item.route,
+                selected = selected,
                 onClick = {
                     navController.navigate(item.route) {
                         popUpTo(navController.graph.startDestinationId) { saveState = true }
@@ -87,7 +100,19 @@ private fun BottomNavBar(navController: NavController) {
                     }
                 },
                 icon = { Icon(item.icon, contentDescription = item.label) },
-                label = { Text(item.label) }
+                label = {
+                    Text(
+                        text = item.label,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = SpamRed,
+                    selectedTextColor = SpamRed,
+                    unselectedIconColor = TextSecondary,
+                    unselectedTextColor = TextSecondary,
+                    indicatorColor = SpamRed.copy(alpha = 0.12f)
+                )
             )
         }
     }
