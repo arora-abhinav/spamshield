@@ -1,6 +1,5 @@
-package com.example.spamshield
+package com.example.spamshield.dataclasses
 
-//Used to have names with spaces in them
 import com.google.gson.annotations.SerializedName
 
 data class StatisticsResponse(
@@ -14,5 +13,5 @@ data class StatisticsResponse(
     @SerializedName("Today Spam Count") val todaySpamCount: Int?,
     @SerializedName("Total Messages") val totalMessages: Int?,
     @SerializedName("Week Spam Count") val weekSpamCount: Int?,
-    @SerializedName("Weekly Spam Distribution") val weeklySpamDistribution: List<Any>?
+    @SerializedName("Weekly Spam Distribution") val weeklySpamDistribution: List<WeeklyDistributionItem>?
 )
