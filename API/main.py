@@ -72,7 +72,7 @@ def opt_out_message_tracking(device_id = Depends(auth.verify_token("access"))):
     return {"Result": "Opted out of future messages being stored"}
 
 #Separate endpoint that allows users to delete stored spam data
-@app.delete("/delete_stored_spam/")
+@app.delete("/delete_stored_spam")
 def delete_spam(device_id = Depends(auth.verify_token("access"))):
     row_count = 0
     with engine.connect() as connection:
@@ -218,7 +218,7 @@ def get_predictions(today: bool = Path(description="A boolean flag to retrieve t
 
         return {"Predictions": results}    
 
-@app.get("/statistics/")
+@app.get("/statistics")
 def statistics(device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
