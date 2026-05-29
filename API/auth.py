@@ -5,9 +5,9 @@ import os
 from jose import jwt, JWTError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uuid
-import main
 from sqlalchemy import text
 from database import engine
+from rate_limiter import limiter
 
 
 #Secret Key and algorithm being used to encode our access token
@@ -57,7 +57,7 @@ def verify_token(token_type: str):
 
 #created the access and refresh tokens
 @router.get("/register")
-@main.limiter("5/hour")
+@limiter("5/hour")
 def register():
     #device_id is a uuid (unique string)
     device_id = str(uuid.uuid4())
@@ -76,7 +76,7 @@ def register():
 
 #This is when the access token expires
 @router.get("/refresh")
-@main.limiter("10/hour")
+@limiter("10/hour")
 def refresh(device_id = Depends(verify_token("refresh"))):
     credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
     with engine.connect() as connection:

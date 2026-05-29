@@ -4,18 +4,16 @@ import classifier_model
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import Annotated, Optional
+from typing import Optional
 import os
-from fastapi.security import HTTPBearer
 import auth
-import jwt
+from rate_limiter import limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 #sql alchemy to make edits to the database
 from sqlalchemy import text
 from database import engine
-from slowapi.util import get_remote_address
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 
 
 #Default parameter to see if the user allows to store the messages from spam classification
@@ -25,10 +23,8 @@ opt_in = False
 #os.getenv("DATABASE_URL") is specifically for Railway
 connection_string = os.getenv("CONNECTION_STRING") or os.getenv("DATABASE_URL")
 
-#The get_device_header is also handling the case where there is no header present
-#which is possibld for the register and health endpoints and thus there should be no error
-#thrown in those cases. This won't throw a 403 
-security_optional = HTTPBearer(auto_error=False)
+
+
 app = FastAPI()
 #For reporting misclassified messages
 class FeedbackMessage(BaseModel):
@@ -37,22 +33,6 @@ class FeedbackMessage(BaseModel):
     #We do NOT want to store missclassified
     message: Optional[str] = None
 
-
-#Simply returns the device_id from the header. If device_id isn't present
-#Then falls back to the ip_address
-def get_device_header(header: Annotated[auth.HTTPAuthorizationCredentials, Depends(security_optional)], request: Request):
-    try:
-        payload = jwt.decode(header.credentials, auth.SECRET_KEY, auth.ALGORITHM)
-        device_id = payload.get("device_id")
-        if device_id is None:
-            return get_remote_address(request)
-    except:
-        return get_remote_address(request)
-    return device_id
-
-limiter = Limiter(key_func=get_device_header)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 #Used to include the authorization functions that are now in a separate file
 app.include_router(auth.router)
@@ -63,6 +43,9 @@ app.add_middleware(
     allow_methods = ['*'],
     allow_headers = ['*']
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 #New endpoint to allow users to opt into sharing spam messages or not (no need to store ham messages
 #unless specified)
