@@ -8,6 +8,4 @@ python-multipart==0.0.29
 python-dotenv==1.2.2
 slowapi==0.1.9
 limits==5.8.0
-anyio==4.13.0
-starlette==0.41.0
 pydantic==2.13.4
