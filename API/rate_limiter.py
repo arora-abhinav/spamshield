@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends
 from slowapi.util import get_remote_address
 from slowapi import Limiter
-import jwt
+from jose import jwt
 
 from API import auth
 
