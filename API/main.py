@@ -158,7 +158,6 @@ def predict_multiple(messages:list[str] = Body(description="Multiple messages as
 #Just to see if the server is up and running
 @app.get("/health")
 @limiter.limit("60/hour")
-@limiter.limit("10/hour")
 def health():
     return {"status": "ok", "model_loaded": classifier_model.data is not None}
 
