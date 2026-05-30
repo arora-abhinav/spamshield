@@ -57,7 +57,7 @@ def verify_token(token_type: str):
 
 #created the access and refresh tokens
 @router.get("/register")
-@limiter("5/hour")
+@limiter.limit("5/hour")
 def register():
     #device_id is a uuid (unique string)
     device_id = str(uuid.uuid4())
@@ -76,7 +76,7 @@ def register():
 
 #This is when the access token expires
 @router.get("/refresh")
-@limiter("10/hour")
+@limiter.limit("10/hour")
 def refresh(device_id = Depends(verify_token("refresh"))):
     credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
     with engine.connect() as connection:
