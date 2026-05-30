@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, HTTPException, Header, Depends
+from fastapi import APIRouter, status, HTTPException, Request, Depends
 from datetime import timedelta, datetime
 from typing import Annotated
 import os
@@ -58,7 +58,7 @@ def verify_token(token_type: str):
 #created the access and refresh tokens
 @router.get("/register")
 @limiter.limit("5/hour")
-def register():
+def register(request: Request):
     #device_id is a uuid (unique string)
     device_id = str(uuid.uuid4())
     access_token = create_token(data={"device_id": device_id, "type": "access"}, expires_delta = timedelta(minutes=30))
@@ -77,7 +77,7 @@ def register():
 #This is when the access token expires
 @router.get("/refresh")
 @limiter.limit("10/hour")
-def refresh(device_id = Depends(verify_token("refresh"))):
+def refresh(request: Request, device_id = Depends(verify_token("refresh"))):
     credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
     with engine.connect() as connection:
         #Deleting the associated refresh token

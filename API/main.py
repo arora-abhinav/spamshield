@@ -51,7 +51,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 #unless specified)
 @app.post("/allow_messages/{opt_in}")
 @limiter.limit("10/hour")
-def allow_message_tracking(opt_in:bool, device_id = Depends(auth.verify_token("access"))):
+def allow_message_tracking(request: Request, opt_in:bool, device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         connection.execute(text("INSERT INTO consent(opt_in, device_id) VALUES(:opt_in, :device_id)"), 
         {
@@ -63,7 +63,7 @@ def allow_message_tracking(opt_in:bool, device_id = Depends(auth.verify_token("a
 
 @app.delete("/opt_out")
 @limiter.limit("5/hour")
-def opt_out_message_tracking(device_id = Depends(auth.verify_token("access"))):
+def opt_out_message_tracking(request: Request, device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         consent_status = connection.execute(text("""SELECT opt_in FROM consent WHERE 
         device_id = :device_id"""), {"device_id" : device_id}).scalar()
@@ -81,7 +81,7 @@ def opt_out_message_tracking(device_id = Depends(auth.verify_token("access"))):
 #Separate endpoint that allows users to delete stored spam data
 @app.delete("/delete_stored_spam")
 @limiter.limit("5/hour")
-def delete_spam(device_id = Depends(auth.verify_token("access"))):
+def delete_spam(request: Request, device_id = Depends(auth.verify_token("access"))):
     row_count = 0
     with engine.connect() as connection:
         result = connection.execute(text("""
@@ -100,7 +100,7 @@ def delete_spam(device_id = Depends(auth.verify_token("access"))):
 #HTTP endpoint to make a single prediction
 @app.post("/predict")
 @limiter.limit("60/hour")
-def predict_one(message:str = Body(description="Single message as input into the model. Prediction will be ham or spam. Useful for new incoming messages"), device_id = Depends(auth.verify_token("access"))):
+def predict_one(request: Request, message:str = Body(description="Single message as input into the model. Prediction will be ham or spam. Useful for new incoming messages"), device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         data = classifier_model.predict_one(message)
         prediction = data["Classification"]
@@ -127,7 +127,7 @@ def predict_one(message:str = Body(description="Single message as input into the
 #HTTP endpoint to make a bulk prediction -> This is only done once
 @app.post("/predict-multiple")
 @limiter.limit("1/day")
-def predict_multiple(messages:list[str] = Body(description="Multiple messages as an array input into the model. Predictions will be ham or spam, returned in the same order of messages. Useful for predicting previous messages"), device_id = Depends(auth.verify_token("access"))):
+def predict_multiple(request: Request, messages:list[str] = Body(description="Multiple messages as an array input into the model. Predictions will be ham or spam, returned in the same order of messages. Useful for predicting previous messages"), device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         #Same logic as predict_one but just in a loop. Instead of calling predict_one endpoint multiple times, 
         #just call the predict_one function in the classifier model multiple times through just one API call.
@@ -158,13 +158,13 @@ def predict_multiple(messages:list[str] = Body(description="Multiple messages as
 #Just to see if the server is up and running
 @app.get("/health")
 @limiter.limit("60/hour")
-def health():
+def health(request: Request):
     return {"status": "ok", "model_loaded": classifier_model.data is not None}
 
 #A feedback endpoint: users report misclassified predictions here, associated with the device 
 @app.post("/feedback")
 @limiter.limit("20/hour")
-def give_feedback(feedback: FeedbackMessage, device_id = Depends(auth.verify_token("access"))):
+def give_feedback(request: Request, feedback: FeedbackMessage, device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         consented = connection.execute(text("SELECT opt_in FROM consent WHERE :device_id = device_id"), {
             "device_id":device_id
@@ -192,7 +192,7 @@ def give_feedback(feedback: FeedbackMessage, device_id = Depends(auth.verify_tok
 @limiter.limit("30/hour")
 #Obtains predictions for either today or previous days
 #Query parameter required determining if previous predictions should be returned or just today's
-def get_predictions(today: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions"), device_id = Depends(auth.verify_token("access"))):
+def get_predictions(request: Request, today: bool = Path(description="A boolean flag to retrieve today's predictions or previous predictions"), device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         current_date= datetime.now().date()
         predictions = None
@@ -233,7 +233,7 @@ def get_predictions(today: bool = Path(description="A boolean flag to retrieve t
 
 @app.get("/statistics")
 @limiter.limit("30/hour")
-def statistics(device_id = Depends(auth.verify_token("access"))):
+def statistics(request: Request, device_id = Depends(auth.verify_token("access"))):
     with engine.connect() as connection:
         spam_count = connection.execute(text("""SELECT COUNT(*) FROM prediction WHERE 
         classification = :classification AND device_id = :device_id"""), 
