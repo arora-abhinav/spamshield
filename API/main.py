@@ -348,3 +348,4 @@ async def handle_exception(request: Request, exception: Exception):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"message": "Oops, something went wrong. Please report to developper"},
     )# force rebuild
+# force rebuild again
