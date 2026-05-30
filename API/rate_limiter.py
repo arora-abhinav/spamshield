@@ -5,7 +5,7 @@ from slowapi.util import get_remote_address
 from slowapi import Limiter
 from jose import jwt
 
-from API import auth
+import auth
 
 #Simply returns the device_id from the header. If device_id isn't present
 #Then falls back to the ip_address
