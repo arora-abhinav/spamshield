@@ -62,6 +62,12 @@ class SpamShieldViewModel @Inject constructor(
     fun loadStatistics() {
         viewModelScope.launch {
             _statisticsState.value = UiState.Loading
+            try {
+                repository.registerIfNeeded()
+            } catch (e: Exception) {
+                _statisticsState.value = UiState.Error("Registration failed: ${e.message}")
+                return@launch
+            }
             repository.fetchStatistics()
                 .onSuccess { _statisticsState.value = UiState.Success(it) }
                 .onFailure { _statisticsState.value = UiState.Error(it.message ?: "Unknown error") }

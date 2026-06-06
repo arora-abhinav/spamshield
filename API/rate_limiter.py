@@ -1,11 +1,14 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
+from fastapi.security import HTTPBearer
 from slowapi.util import get_remote_address
 from slowapi import Limiter
 from jose import jwt
 
 import auth
+
+security_optional = HTTPBearer(auto_error=False)
 
 #Simply returns the device_id from the header. If device_id isn't present
 #Then falls back to the ip_address
