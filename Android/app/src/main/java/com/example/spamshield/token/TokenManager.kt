@@ -12,6 +12,7 @@ object TokenManager {
     private const val KEY_DEVICE_ID = "device_id"
     private const val KEY_IS_REGISTERED = "is_registered"
     private const val KEY_OPTED_IN = "opted_in"
+    private const val KEY_HAS_SYNCED_INBOX = "has_synced_inbox"
 
     @Volatile private var prefs: SharedPreferences? = null
 
@@ -70,6 +71,13 @@ object TokenManager {
 
     fun setOptedIn(context: Context, value: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_OPTED_IN, value).apply()
+    }
+
+    fun hasSyncedInbox(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_HAS_SYNCED_INBOX, false)
+
+    fun setHasSyncedInbox(context: Context, value: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_HAS_SYNCED_INBOX, value).apply()
     }
 
     fun clearAll(context: Context) {

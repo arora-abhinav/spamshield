@@ -73,11 +73,26 @@ class SpamShieldRepository @Inject constructor(
         }
     }
 
-    suspend fun predictMultiple(messages: List<String>): Result<BatchPredictionsResponse> {
+    suspend fun predictMultiple(senders: List<String>, messages: List<String>): Result<BatchPredictionsResponse> {
         return try {
             val response = api.predictMultiple(messages)
-            if (response.isSuccessful) Result.success(response.body()!!)
-            else Result.failure(Exception("Batch prediction failed: ${response.code()}"))
+            if (response.isSuccessful) {
+                val batchResponse = response.body()!!
+                batchResponse.batchPredictions.forEachIndexed { index, prediction ->
+                    val entity = MessageEntity(
+                        predictionId = prediction.predictionId,
+                        messageText = messages.getOrElse(index) { "" },
+                        classification = prediction.classification.lowercase(),
+                        confidence = prediction.confidence,
+                        timestamp = prediction.time,
+                        sender = senders.getOrElse(index) { "Unknown" }
+                    )
+                    dao.insert(entity)
+                }
+                Result.success(batchResponse)
+            } else {
+                Result.failure(Exception("Batch prediction failed: ${response.code()}"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

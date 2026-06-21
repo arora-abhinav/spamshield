@@ -9,9 +9,11 @@ import com.example.spamshield.service.SmsProcessingService
 
 class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        android.util.Log.d("SmsReceiver", "onReceive fired, action=${intent.action}")
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
 
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        android.util.Log.d("SmsReceiver", "SMS parts received: ${messages.size}")
         val grouped = mutableMapOf<String, StringBuilder>()
         messages.forEach { sms ->
             grouped.getOrPut(sms.originatingAddress ?: "Unknown") { StringBuilder() }
@@ -19,6 +21,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         grouped.forEach { (sender, body) ->
+            android.util.Log.d("SmsReceiver", "Starting service for sender=$sender")
             val serviceIntent = Intent(context, SmsProcessingService::class.java).apply {
                 putExtra("message", body.toString())
                 putExtra("sender", sender)

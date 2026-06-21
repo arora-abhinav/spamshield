@@ -38,11 +38,18 @@ class SmsProcessingService : LifecycleService() {
 
         serviceScope.launch {
             try {
-                repository.predictOne(message, sender).onSuccess { entity ->
-                    if (entity.classification == "spam") {
-                        showSpamNotification(sender, entity.confidence)
+                repository.registerIfNeeded()
+                repository.predictOne(message, sender)
+                    .onSuccess { entity ->
+                        if (entity.classification == "spam") {
+                            showSpamNotification(sender, entity.confidence)
+                        }
                     }
-                }
+                    .onFailure { error ->
+                        android.util.Log.e("SmsProcessingService", "Prediction failed: ${error.message}")
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("SmsProcessingService", "Registration or prediction error: ${e.message}")
             } finally {
                 stopSelf(startId)
             }

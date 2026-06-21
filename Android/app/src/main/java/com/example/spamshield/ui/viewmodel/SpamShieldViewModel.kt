@@ -1,6 +1,7 @@
 package com.example.spamshield.ui.viewmodel
 
 import android.content.Context
+import android.provider.Telephony
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.spamshield.data.local.MessageEntity
@@ -109,6 +110,49 @@ class SpamShieldViewModel @Inject constructor(
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    fun loadInboxMessages(context: Context) {
+        if (TokenManager.hasSyncedInbox(context)) return
+        viewModelScope.launch {
+            try {
+                repository.registerIfNeeded()
+            } catch (e: Exception) {
+                _errorMessage.value = "Registration failed: ${e.message}"
+                return@launch
+            }
+
+            val senders = mutableListOf<String>()
+            val bodies = mutableListOf<String>()
+
+            val cursor = context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY),
+                null, null,
+                "${Telephony.Sms.DATE} DESC"
+            )
+            cursor?.use {
+                val addressIdx = it.getColumnIndex(Telephony.Sms.ADDRESS)
+                val bodyIdx = it.getColumnIndex(Telephony.Sms.BODY)
+                var count = 0
+                while (it.moveToNext() && count < 100) {
+                    val sender = it.getString(addressIdx) ?: "Unknown"
+                    val body = it.getString(bodyIdx) ?: continue
+                    senders.add(sender)
+                    bodies.add(body)
+                    count++
+                }
+            }
+
+            if (bodies.isEmpty()) {
+                TokenManager.setHasSyncedInbox(context, true)
+                return@launch
+            }
+
+            repository.predictMultiple(senders, bodies)
+                .onSuccess { TokenManager.setHasSyncedInbox(context, true) }
+                .onFailure { _errorMessage.value = "Failed to classify inbox: ${it.message}" }
         }
     }
 
