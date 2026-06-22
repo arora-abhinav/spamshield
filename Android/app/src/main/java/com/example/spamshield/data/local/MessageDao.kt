@@ -18,10 +18,10 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE classification = 'spam' ORDER BY timestamp DESC")
     fun getSpamMessages(): Flow<List<MessageEntity>>
 
-    @Query("SELECT * FROM messages WHERE date(timestamp) = date('now') ORDER BY timestamp DESC")
+    @Query("SELECT * FROM messages WHERE date(timestamp) = date('now', 'localtime') ORDER BY timestamp DESC")
     fun getTodaysMessages(): Flow<List<MessageEntity>>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM messages WHERE sender = :sender AND messageText = :body AND date(timestamp) = date(:timestamp) LIMIT 1)")
+    @Query("SELECT EXISTS(SELECT 1 FROM messages WHERE sender = :sender AND messageText = :body AND date(timestamp) = date(:timestamp, 'localtime') LIMIT 1)")
     suspend fun existsBySenderBodyAndDate(sender: String, body: String, timestamp: String): Boolean
 
     @Update
@@ -33,8 +33,11 @@ interface MessageDao {
     @Query("SELECT COUNT(*) FROM messages WHERE classification = 'spam'")
     suspend fun getSpamCount(): Int
 
-    @Query("SELECT COUNT(*) FROM messages WHERE classification = 'spam' AND date(timestamp) = date('now')")
+    @Query("SELECT COUNT(*) FROM messages WHERE classification = 'spam' AND date(timestamp) = date('now', 'localtime')")
     suspend fun getTodaySpamCount(): Int
+
+    @Query("SELECT predictionId FROM messages WHERE date(timestamp) = date('now', 'localtime')")
+    suspend fun getTodaysPredictionIds(): List<Int>
 
     @Query("SELECT * FROM messages WHERE predictionId = :predictionId LIMIT 1")
     suspend fun getByPredictionId(predictionId: Int): MessageEntity?

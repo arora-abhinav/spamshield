@@ -13,6 +13,9 @@ import com.example.spamshield.token.TokenManager
 import android.util.Base64
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaType
@@ -29,6 +32,9 @@ class SpamShieldRepository @Inject constructor(
 ) {
 
     private val registrationMutex = Mutex()
+
+    private val _statistics = MutableStateFlow<StatisticsResponse?>(null)
+    val statistics: StateFlow<StatisticsResponse?> = _statistics.asStateFlow()
 
     suspend fun registerIfNeeded() = registrationMutex.withLock {
         if (TokenManager.isRegistered(context)) return@withLock
@@ -121,8 +127,10 @@ class SpamShieldRepository @Inject constructor(
                 return Result.failure(Exception("Fetch history failed: ${response.code()}"))
             }
             val predictions = response.body()!!.predictions
+            val todayIds = dao.getTodaysPredictionIds().toSet()
             val merged = predictions.mapNotNull { serverPrediction ->
                 val serverId = serverPrediction.id ?: return@mapNotNull null
+                if (serverId in todayIds) return@mapNotNull null
                 dao.getByPredictionId(serverId) ?: MessageEntity(
                     predictionId = serverId,
                     messageText = "",
@@ -141,8 +149,11 @@ class SpamShieldRepository @Inject constructor(
     suspend fun fetchStatistics(): Result<StatisticsResponse> {
         return try {
             val response = api.getStatistics()
-            if (response.isSuccessful) Result.success(response.body()!!)
-            else Result.failure(Exception("Fetch statistics failed: ${response.code()}"))
+            if (response.isSuccessful) {
+                val body = response.body()!!
+                _statistics.value = body
+                Result.success(body)
+            } else Result.failure(Exception("Fetch statistics failed: ${response.code()}"))
         } catch (e: Exception) {
             Result.failure(e)
         }

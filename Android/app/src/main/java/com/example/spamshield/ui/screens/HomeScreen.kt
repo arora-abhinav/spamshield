@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -167,10 +168,23 @@ fun HomeScreen(viewModel: SpamShieldViewModel) {
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
 
-            LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
-                items(pagedMessages) { message ->
-                    MessageRow(message = message, onClick = { selectedMessage = message })
-                    HorizontalDivider(color = DarkBorder, thickness = 0.5.dp)
+            if (pagedMessages.isEmpty()) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No messages classified today",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary
+                    )
+                }
+            } else {
+                LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
+                    items(pagedMessages) { message ->
+                        MessageRow(message = message, onClick = { selectedMessage = message })
+                        HorizontalDivider(color = DarkBorder, thickness = 0.5.dp)
+                    }
                 }
             }
             if (showPagination) {

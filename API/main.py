@@ -211,12 +211,11 @@ def get_predictions(request: Request, today: bool = Path(description="A boolean 
             })
         #Case where previous predictions must be returned
         else:
-            predictions = connection.execute(text("""SELECT id, classification, confidence, 
-            "timestamp" FROM prediction WHERE DATE("timestamp") < :current_date 
-            AND device_id = :device_id AND DATE("timestamp") > 
-            :current_date - :max_days * INTERVAL '1 day' """), 
+            predictions = connection.execute(text("""SELECT id, classification, confidence,
+            "timestamp" FROM prediction WHERE device_id = :device_id
+            AND DATE("timestamp") > :current_date - :max_days * INTERVAL '1 day' """),
             {
-            "current_date": current_date, 
+            "current_date": current_date,
             "device_id":device_id,
             "max_days": max_days
             })

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpamShield — Privacy Policy</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.75;
+      color: #1a1a1a;
+      background: #ffffff;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    header {
+      border-bottom: 1px solid #e5e5e5;
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .app-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #111;
+      letter-spacing: -0.01em;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #111;
+      margin-top: 0.25rem;
+      letter-spacing: -0.02em;
+    }
+
+    .meta {
+      font-size: 0.875rem;
+      color: #666;
+      margin-top: 0.5rem;
+    }
+
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #111;
+      margin-top: 2.5rem;
+      margin-bottom: 0.6rem;
+    }
+
+    p {
+      margin-bottom: 1rem;
+      color: #333;
+    }
+
+    ul {
+      margin: 0.5rem 0 1rem 1.25rem;
+      color: #333;
+    }
+
+    ul li {
+      margin-bottom: 0.4rem;
+    }
+
+    .highlight-box {
+      background: #f0f7ff;
+      border-left: 3px solid #2563eb;
+      padding: 1rem 1.25rem;
+      border-radius: 0 6px 6px 0;
+      margin: 1.5rem 0;
+    }
+
+    .highlight-box p {
+      margin: 0;
+      color: #1e3a5f;
+      font-size: 0.95rem;
+    }
+
+    .section-divider {
+      border: none;
+      border-top: 1px solid #e5e5e5;
+      margin: 2rem 0 0;
+    }
+
+    a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #e5e5e5;
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f0f0f; color: #e5e5e5; }
+      header { border-bottom-color: #2a2a2a; }
+      .app-name, h1, h2 { color: #f0f0f0; }
+      p, ul { color: #ccc; }
+      .meta { color: #888; }
+      .highlight-box { background: #0d1f38; border-left-color: #3b82f6; }
+      .highlight-box p { color: #93c5fd; }
+      .section-divider { border-top-color: #2a2a2a; }
+      footer { border-top-color: #2a2a2a; color: #666; }
+      a { color: #60a5fa; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="app-name">SpamShield</div>
+      <h1>Privacy Policy</h1>
+      <p class="meta">Effective date: June 22, 2026 &nbsp;·&nbsp; Last updated: June 22, 2026</p>
+    </header>
+
+    <div class="highlight-box">
+      <p><strong>The short version:</strong> SpamShield reads your SMS messages solely to classify them as spam or not spam. Your message text is never stored on our servers. We collect only anonymized classification metadata (not the messages themselves) to show you statistics. We do not sell, share, or monetize any data.</p>
+    </div>
+
+    <h2>1. Who we are</h2>
+    <p>SpamShield ("the app", "we", "us") is an independent application developed by Abhinav Arora. The app provides on-device SMS spam classification powered by a machine learning model hosted on a private server. You can contact us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a>.</p>
+
+    <h2>2. What data we access</h2>
+    <p>SpamShield requests the following Android permissions:</p>
+    <ul>
+      <li><strong>READ_SMS</strong> — to read your existing inbox messages when you explicitly enable the "Classify previous messages" option in Settings. This is a one-time, opt-in action and is never performed automatically on startup.</li>
+      <li><strong>RECEIVE_SMS</strong> — to classify new incoming messages in real time as they arrive.</li>
+      <li><strong>POST_NOTIFICATIONS</strong> — to display a status notification while the app processes an incoming message in the background. Required on Android 13 and above.</li>
+    </ul>
+    <p>SMS message text is transmitted to our classification server <em>only</em> for the purpose of determining whether the message is spam. It is processed in memory and is <strong>never written to disk or stored in any database</strong> on our servers.</p>
+
+    <h2>3. What data we store</h2>
+    <p>We store a limited set of classification metadata associated with an anonymous device identifier (a randomly generated UUID assigned at registration — not your phone number, IMEI, or any other hardware identifier). This metadata includes:</p>
+    <ul>
+      <li>Classification result (spam / not spam)</li>
+      <li>Confidence score</li>
+      <li>Timestamp of classification</li>
+    </ul>
+    <p><strong>We do not store the text content of your messages, sender information, or any personally identifiable content on our servers under any circumstances.</strong></p>
+    <p>A local copy of classification results — including message text, sender identifier, confidence score, and timestamp — is stored in a standard SQLite database on your device via Android Room. This local database is not encrypted, but it is private to the app and inaccessible to other apps on the device. Authentication tokens (JWT) are stored separately in Android EncryptedSharedPreferences. You can delete all locally stored data at any time from within the app.</p>
+
+    <h2>4. Feedback and optional data sharing</h2>
+    <p>If you choose to report a misclassification (i.e., tell us a message was classified incorrectly), we store a feedback record linked to the original classification. If and only if you have explicitly opted in to data contribution <em>and</em> the corrected label is spam, the message text may be sent to us to improve the model. You can opt out at any time from the Settings screen, and any previously shared messages can be deleted on request.</p>
+
+    <h2>5. How we use your data</h2>
+    <p>Data collected is used exclusively for:</p>
+    <ul>
+      <li>Providing spam classification results to you</li>
+      <li>Displaying your personal usage statistics within the app</li>
+      <li>Improving the accuracy of the classification model (only with your explicit opt-in consent for spam feedback)</li>
+    </ul>
+    <p>We do not use your data for advertising, profiling, or any purpose unrelated to spam classification.</p>
+
+    <h2>6. Data sharing and third parties</h2>
+    <p>We do not sell, rent, or share your data with any third parties. The classification server is hosted on Railway (railway.app). Railway's infrastructure processes your requests in transit; no user data is shared with Railway beyond standard hosting operations. Railway's privacy policy is available at <a href="https://railway.app/legal/privacy" target="_blank" rel="noopener">railway.app/legal/privacy</a>.</p>
+
+    <h2>7. Data retention and deletion</h2>
+    <p>Classification metadata is retained on our server for as long as your device remains registered. You may request full deletion of all data associated with your device at any time by using the <strong>"Delete All Stored Spam"</strong> button in the app's Settings screen, which sends a deletion request to our server and clears your local database simultaneously. You may also email us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a> to request manual deletion.</p>
+
+    <h2>8. Security</h2>
+    <p>All communication between the app and our server uses HTTPS. Authentication is handled via short-lived JWT access tokens with rotating refresh tokens stored in Android EncryptedSharedPreferences. Your anonymous device ID is never transmitted in plain text. We do not store passwords or any credentials linked to your personal identity.</p>
+
+    <h2>9. Children's privacy</h2>
+    <p>SpamShield is not directed at children under the age of 13. We do not knowingly collect data from children. If you believe a child has used the app, please contact us and we will delete any associated data.</p>
+
+    <h2>10. Your rights</h2>
+    <p>You have the right to:</p>
+    <ul>
+      <li>Access the classification metadata stored for your device</li>
+      <li>Delete all data associated with your device at any time</li>
+      <li>Withdraw consent for optional data sharing at any time</li>
+      <li>Revoke SMS permissions at any time via Android Settings → Apps → SpamShield → Permissions</li>
+    </ul>
+    <p>To exercise any of these rights, use the in-app Settings screen or contact us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a>.</p>
+
+    <h2>11. Changes to this policy</h2>
+    <p>If we make material changes to this policy, we will update the effective date at the top of this page. Continued use of the app after changes constitutes acceptance of the updated policy.</p>
+
+    <h2>12. Contact</h2>
+    <p>For any privacy-related questions or requests, contact:<br>
+    Abhinav Arora<br>
+    <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a></p>
+
+    <hr class="section-divider" />
+
+    <footer>
+      <p>SpamShield Privacy Policy · Effective June 22, 2026</p>
+    </footer>
+  </div>
+</body>
+</html>

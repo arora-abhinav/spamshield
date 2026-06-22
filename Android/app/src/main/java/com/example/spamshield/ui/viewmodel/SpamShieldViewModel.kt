@@ -67,6 +67,11 @@ class SpamShieldViewModel @Inject constructor(
     }
 
     fun loadStatistics() {
+        val cached = repository.statistics.value
+        if (cached != null) {
+            _statisticsState.value = UiState.Success(cached)
+            return
+        }
         viewModelScope.launch {
             _statisticsState.value = UiState.Loading
             try {
@@ -78,6 +83,13 @@ class SpamShieldViewModel @Inject constructor(
             repository.fetchStatistics()
                 .onSuccess { _statisticsState.value = UiState.Success(it) }
                 .onFailure { _statisticsState.value = UiState.Error(it.message ?: "Unknown error") }
+        }
+    }
+
+    fun refreshStatisticsInBackground() {
+        viewModelScope.launch {
+            repository.fetchStatistics()
+                .onSuccess { _statisticsState.value = UiState.Success(it) }
         }
     }
 
@@ -213,6 +225,7 @@ class SpamShieldViewModel @Inject constructor(
                     .onSuccess {
                         android.util.Log.d("SpamShield", "loadInboxMessages: predictMultiple succeeded")
                         TokenManager.setHasSyncedInbox(context, true)
+                        refreshStatisticsInBackground()
                     }
                     .onFailure {
                         android.util.Log.e("SpamShield", "loadInboxMessages: predictMultiple failed: ${it.message}")

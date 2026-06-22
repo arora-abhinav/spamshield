@@ -66,7 +66,9 @@ fun HistoryScreen(viewModel: SpamShieldViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.loadPreviousMsgConsent(context)
-        if (historyState !is UiState.Success) viewModel.loadHistory()
+        val alreadyLoaded = historyState is UiState.Success &&
+            (historyState as UiState.Success).data.isNotEmpty()
+        if (!alreadyLoaded) viewModel.loadHistory()
     }
 
     LaunchedEffect(errorMessage) {
@@ -185,7 +187,7 @@ fun HistoryScreen(viewModel: SpamShieldViewModel) {
                     is UiState.Success -> if (filteredMessages.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                text = "No messages yet",
+                                text = "No previous messages",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = TextSecondary
                             )

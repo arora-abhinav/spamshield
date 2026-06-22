@@ -41,6 +41,7 @@ class SmsProcessingService : LifecycleService() {
                 repository.registerIfNeeded()
                 repository.predictOne(message, sender)
                     .onSuccess { entity ->
+                        serviceScope.launch { repository.fetchStatistics() }
                         if (entity.classification == "spam") {
                             showSpamNotification(sender, entity.confidence)
                         }
