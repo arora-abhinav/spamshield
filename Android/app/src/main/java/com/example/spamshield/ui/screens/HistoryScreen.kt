@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -26,6 +28,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -49,12 +52,12 @@ import com.example.spamshield.ui.theme.HamGreen
 import com.example.spamshield.ui.theme.SpamRed
 import com.example.spamshield.ui.theme.TextSecondary
 import com.example.spamshield.ui.viewmodel.SpamShieldViewModel
+import com.example.spamshield.ui.viewmodel.UiState
 
 @Composable
 fun HistoryScreen(viewModel: SpamShieldViewModel) {
     val context = LocalContext.current
-    val allMessages by viewModel.allMessages.collectAsStateWithLifecycle()
-    val spamMessages by viewModel.spamMessages.collectAsStateWithLifecycle()
+    val historyState by viewModel.historyState.collectAsStateWithLifecycle()
     val previousMsgConsent by viewModel.previousMsgConsent.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
@@ -63,6 +66,7 @@ fun HistoryScreen(viewModel: SpamShieldViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.loadPreviousMsgConsent(context)
+        if (historyState !is UiState.Success) viewModel.loadHistory()
     }
 
     LaunchedEffect(errorMessage) {
@@ -72,20 +76,33 @@ fun HistoryScreen(viewModel: SpamShieldViewModel) {
         }
     }
 
+    val listState = rememberLazyListState()
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentPage by remember { mutableIntStateOf(0) }
     val tabs = listOf("All", "Spam", "Ham")
     val pageSize = 50
 
-    LaunchedEffect(selectedTab) { currentPage = 0 }
+    LaunchedEffect(selectedTab) {
+        currentPage = 0
+        listState.scrollToItem(0)
+    }
+    LaunchedEffect(currentPage) { listState.scrollToItem(0) }
 
+    val serverMessages = (historyState as? UiState.Success)?.data ?: emptyList()
     val filteredMessages = when (selectedTab) {
-        1 -> spamMessages
-        2 -> allMessages.filter { it.classification == "ham" }
-        else -> allMessages
+        1 -> serverMessages.filter { it.classification == "spam" }
+        2 -> serverMessages.filter { it.classification == "ham" }
+        else -> serverMessages
     }
     val totalPages = maxOf(1, (filteredMessages.size + pageSize - 1) / pageSize)
     val pagedMessages = filteredMessages.drop(currentPage * pageSize).take(pageSize)
+
+    val showPagination by remember(totalPages, pagedMessages.size) {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            totalPages > 1 && pagedMessages.isNotEmpty() && lastVisible >= pagedMessages.size - 1
+        }
+    }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -150,46 +167,57 @@ fun HistoryScreen(viewModel: SpamShieldViewModel) {
                     }
                 }
 
-                if (filteredMessages.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "No messages yet",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = TextSecondary
-                        )
+                when (historyState) {
+                    is UiState.Idle, is UiState.Loading -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = SpamRed)
+                        }
                     }
-                } else {
-                    LazyColumn(modifier = Modifier.weight(1f)) {
+                    is UiState.Error -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "Could not load history. Check your connection.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                    is UiState.Success -> if (filteredMessages.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "No messages yet",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = TextSecondary
+                            )
+                        }
+                    } else {
+                    LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
                         items(pagedMessages) { message ->
                             HistoryMessageRow(message = message)
                             HorizontalDivider(color = DarkBorder, thickness = 0.5.dp)
                         }
                     }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(DarkSurface)
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { currentPage-- },
-                            enabled = currentPage > 0
+                    if (showPagination) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(DarkSurface)
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("← Prev", color = if (currentPage > 0) SpamRed else TextSecondary)
+                            TextButton(onClick = { currentPage-- }, enabled = currentPage > 0) {
+                                Text("← Prev", style = MaterialTheme.typography.labelSmall,
+                                    color = if (currentPage > 0) SpamRed else TextSecondary)
+                            }
+                            Text("Page ${currentPage + 1} of $totalPages",
+                                style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                            TextButton(onClick = { currentPage++ }, enabled = currentPage < totalPages - 1) {
+                                Text("Next →", style = MaterialTheme.typography.labelSmall,
+                                    color = if (currentPage < totalPages - 1) SpamRed else TextSecondary)
+                            }
                         }
-                        Text(
-                            text = "Page ${currentPage + 1} of $totalPages",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                        TextButton(
-                            onClick = { currentPage++ },
-                            enabled = currentPage < totalPages - 1
-                        ) {
-                            Text("Next →", color = if (currentPage < totalPages - 1) SpamRed else TextSecondary)
-                        }
+                    }
                     }
                 }
             }

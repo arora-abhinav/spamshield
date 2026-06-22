@@ -59,12 +59,13 @@ class SpamShieldRepository @Inject constructor(
             val response = api.predict(body)
             if (response.isSuccessful) {
                 val prediction = response.body()!!
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
                 val entity = MessageEntity(
                     predictionId = prediction.predictionId,
                     messageText = message,
                     classification = prediction.classification.lowercase(),
                     confidence = prediction.confidence,
-                    timestamp = prediction.time,
+                    timestamp = sdf.format(java.util.Date()),
                     sender = sender
                 )
                 dao.insert(entity)
@@ -113,11 +114,25 @@ class SpamShieldRepository @Inject constructor(
 
     fun getTodaysMessages(): Flow<List<MessageEntity>> = dao.getTodaysMessages()
 
-    suspend fun fetchHistory(today: Boolean = false): Result<PredictionsResponse> {
+    suspend fun fetchAndMergeHistory(): Result<List<MessageEntity>> {
         return try {
-            val response = api.getPredictions(today)
-            if (response.isSuccessful) Result.success(response.body()!!)
-            else Result.failure(Exception("Fetch history failed: ${response.code()}"))
+            val response = api.getPredictions(today = false)
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("Fetch history failed: ${response.code()}"))
+            }
+            val predictions = response.body()!!.predictions
+            val merged = predictions.mapNotNull { serverPrediction ->
+                val serverId = serverPrediction.id ?: return@mapNotNull null
+                dao.getByPredictionId(serverId) ?: MessageEntity(
+                    predictionId = serverId,
+                    messageText = "",
+                    sender = "Unknown",
+                    classification = serverPrediction.classification?.lowercase() ?: "",
+                    confidence = serverPrediction.confidence ?: 0.0,
+                    timestamp = serverPrediction.timestamp ?: ""
+                )
+            }
+            Result.success(merged.sortedByDescending { it.timestamp })
         } catch (e: Exception) {
             Result.failure(e)
         }

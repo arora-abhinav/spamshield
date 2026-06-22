@@ -47,6 +47,9 @@ class SpamShieldViewModel @Inject constructor(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _historyState = MutableStateFlow<UiState<List<com.example.spamshield.data.local.MessageEntity>>>(UiState.Idle)
+    val historyState: StateFlow<UiState<List<com.example.spamshield.data.local.MessageEntity>>> = _historyState.asStateFlow()
+
     private val _optedIn = MutableStateFlow(false)
     val optedIn: StateFlow<Boolean> = _optedIn.asStateFlow()
 
@@ -113,6 +116,16 @@ class SpamShieldViewModel @Inject constructor(
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    fun loadHistory() {
+        if (_historyState.value is UiState.Loading) return
+        viewModelScope.launch {
+            _historyState.value = UiState.Loading
+            repository.fetchAndMergeHistory()
+                .onSuccess { _historyState.value = UiState.Success(it) }
+                .onFailure { _historyState.value = UiState.Error(it.message ?: "Unknown error") }
         }
     }
 

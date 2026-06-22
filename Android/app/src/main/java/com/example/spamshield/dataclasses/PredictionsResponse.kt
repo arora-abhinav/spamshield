@@ -7,6 +7,7 @@ data class PredictionsResponse(
 )
 
 data class IndividualPrediction(
+    @SerializedName("ID") val id: Int?,
     @SerializedName("Classification") val classification: String?,
     @SerializedName("Confidence") val confidence: Double?,
     @SerializedName("Timestamp") val timestamp: String?

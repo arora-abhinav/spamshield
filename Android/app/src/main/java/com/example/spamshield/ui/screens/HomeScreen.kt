@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -36,6 +37,8 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -102,6 +105,22 @@ fun HomeScreen(viewModel: SpamShieldViewModel) {
     var selectedMessage by remember { mutableStateOf<MessageEntity?>(null) }
     val sheetState = rememberModalBottomSheetState()
 
+    val listState = rememberLazyListState()
+    val pageSize = 50
+    var currentPage by remember { mutableIntStateOf(0) }
+    val sortedMessages = todayMessages.sortedByDescending { it.timestamp }
+    val totalPages = maxOf(1, (sortedMessages.size + pageSize - 1) / pageSize)
+    val pagedMessages = sortedMessages.drop(currentPage * pageSize).take(pageSize)
+
+    val showPagination by remember(totalPages, pagedMessages.size) {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            totalPages > 1 && pagedMessages.isNotEmpty() && lastVisible >= pagedMessages.size - 1
+        }
+    }
+
+    LaunchedEffect(currentPage) { listState.scrollToItem(0) }
+
     Scaffold(
         containerColor = DarkBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -148,10 +167,31 @@ fun HomeScreen(viewModel: SpamShieldViewModel) {
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
 
-            LazyColumn {
-                items(allMessages) { message ->
+            LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
+                items(pagedMessages) { message ->
                     MessageRow(message = message, onClick = { selectedMessage = message })
                     HorizontalDivider(color = DarkBorder, thickness = 0.5.dp)
+                }
+            }
+            if (showPagination) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(DarkSurface)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { currentPage-- }, enabled = currentPage > 0) {
+                        Text("← Prev", style = MaterialTheme.typography.labelSmall,
+                            color = if (currentPage > 0) SpamRed else TextSecondary)
+                    }
+                    Text("Page ${currentPage + 1} of $totalPages",
+                        style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                    TextButton(onClick = { currentPage++ }, enabled = currentPage < totalPages - 1) {
+                        Text("Next →", style = MaterialTheme.typography.labelSmall,
+                            color = if (currentPage < totalPages - 1) SpamRed else TextSecondary)
+                    }
                 }
             }
         }
