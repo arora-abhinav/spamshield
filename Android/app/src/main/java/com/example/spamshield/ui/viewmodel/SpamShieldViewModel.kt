@@ -50,6 +50,9 @@ class SpamShieldViewModel @Inject constructor(
     private val _optedIn = MutableStateFlow(false)
     val optedIn: StateFlow<Boolean> = _optedIn.asStateFlow()
 
+    private val _previousMsgConsent = MutableStateFlow(false)
+    val previousMsgConsent: StateFlow<Boolean> = _previousMsgConsent.asStateFlow()
+
     fun registerIfNeeded() {
         viewModelScope.launch {
             try {
@@ -113,46 +116,98 @@ class SpamShieldViewModel @Inject constructor(
         }
     }
 
+    fun loadPreviousMsgConsent(context: Context) {
+        _previousMsgConsent.value = TokenManager.getPreviousMsgConsent(context)
+    }
+
+    fun setPreviousMsgConsent(context: Context, granted: Boolean) {
+        TokenManager.setPreviousMsgConsent(context, granted)
+        _previousMsgConsent.value = granted
+        if (granted) TokenManager.setHasSyncedInbox(context, false)
+    }
+
     fun loadInboxMessages(context: Context) {
+        android.util.Log.d("SpamShield", "loadInboxMessages called, hasSynced=${TokenManager.hasSyncedInbox(context)}")
         if (TokenManager.hasSyncedInbox(context)) return
         viewModelScope.launch {
+            _isLoading.value = true
             try {
-                repository.registerIfNeeded()
-            } catch (e: Exception) {
-                _errorMessage.value = "Registration failed: ${e.message}"
-                return@launch
-            }
-
-            val senders = mutableListOf<String>()
-            val bodies = mutableListOf<String>()
-
-            val cursor = context.contentResolver.query(
-                Telephony.Sms.CONTENT_URI,
-                arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY),
-                null, null,
-                "${Telephony.Sms.DATE} DESC"
-            )
-            cursor?.use {
-                val addressIdx = it.getColumnIndex(Telephony.Sms.ADDRESS)
-                val bodyIdx = it.getColumnIndex(Telephony.Sms.BODY)
-                var count = 0
-                while (it.moveToNext() && count < 100) {
-                    val sender = it.getString(addressIdx) ?: "Unknown"
-                    val body = it.getString(bodyIdx) ?: continue
-                    senders.add(sender)
-                    bodies.add(body)
-                    count++
+                try {
+                    repository.registerIfNeeded()
+                    android.util.Log.d("SpamShield", "loadInboxMessages: registration OK")
+                } catch (e: Exception) {
+                    android.util.Log.e("SpamShield", "loadInboxMessages: registration failed: ${e.message}")
+                    _errorMessage.value = "Registration failed: ${e.message}"
+                    return@launch
                 }
-            }
 
-            if (bodies.isEmpty()) {
-                TokenManager.setHasSyncedInbox(context, true)
-                return@launch
-            }
+                val senders = mutableListOf<String>()
+                val bodies = mutableListOf<String>()
+                val timestamps = mutableListOf<String>()
 
-            repository.predictMultiple(senders, bodies)
-                .onSuccess { TokenManager.setHasSyncedInbox(context, true) }
-                .onFailure { _errorMessage.value = "Failed to classify inbox: ${it.message}" }
+                var rawCount = 0
+                var skipped = 0
+                try {
+                    val cursor = context.contentResolver.query(
+                        Telephony.Sms.Inbox.CONTENT_URI,
+                        arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
+                        null, null,
+                        "${Telephony.Sms.DATE} DESC"
+                    )
+                    if (cursor == null) {
+                        _errorMessage.value = "Could not access SMS inbox — please verify SMS permission is granted."
+                        return@launch
+                    }
+                    cursor.use {
+                        rawCount = it.count
+                        android.util.Log.d("SpamShield", "loadInboxMessages: inbox cursor count=$rawCount")
+                        val addressIdx = it.getColumnIndex(Telephony.Sms.ADDRESS)
+                        val bodyIdx = it.getColumnIndex(Telephony.Sms.BODY)
+                        val dateIdx = it.getColumnIndex(Telephony.Sms.DATE)
+                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                        var count = 0
+                        while (it.moveToNext() && count < 100) {
+                            val sender = it.getString(addressIdx) ?: "Unknown"
+                            val body = it.getString(bodyIdx)
+                            if (body == null) { skipped++; continue }
+                            val dateMs = it.getLong(dateIdx)
+                            senders.add(sender)
+                            bodies.add(body)
+                            timestamps.add(sdf.format(java.util.Date(dateMs)))
+                            count++
+                        }
+                    }
+                    android.util.Log.d("SpamShield", "loadInboxMessages: added ${bodies.size}, skipped $skipped of $rawCount")
+                } catch (e: Exception) {
+                    android.util.Log.e("SpamShield", "loadInboxMessages: cursor error: ${e.message}")
+                    _errorMessage.value = "Could not read SMS messages: ${e.message}"
+                    return@launch
+                }
+
+                if (bodies.isEmpty()) {
+                    val msg = if (rawCount == 0) {
+                        "SMS inbox returned 0 messages. If you use Google Messages or another RCS app, those messages are not traditional SMS and cannot be read by third-party apps."
+                    } else {
+                        "Found $rawCount messages but all $skipped had no text (may be picture/MMS messages)."
+                    }
+                    android.util.Log.w("SpamShield", "loadInboxMessages: $msg")
+                    _errorMessage.value = msg
+                    return@launch
+                }
+
+                android.util.Log.d("SpamShield", "loadInboxMessages: calling predictMultiple with ${bodies.size} messages")
+                repository.predictMultiple(senders, bodies, timestamps)
+                    .onSuccess {
+                        android.util.Log.d("SpamShield", "loadInboxMessages: predictMultiple succeeded")
+                        TokenManager.setHasSyncedInbox(context, true)
+                    }
+                    .onFailure {
+                        android.util.Log.e("SpamShield", "loadInboxMessages: predictMultiple failed: ${it.message}")
+                        _errorMessage.value = "Failed to classify inbox: ${it.message}"
+                    }
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 

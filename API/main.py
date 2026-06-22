@@ -202,7 +202,7 @@ def get_predictions(request: Request, today: bool = Path(description="A boolean 
 
         #Case where today's predictions must be retuned
         if today:
-            predictions = connection.execute(text("""SELECT classification, confidence, 
+            predictions = connection.execute(text("""SELECT id, classification, confidence, 
             "timestamp" FROM prediction WHERE DATE("timestamp") = :current_date 
             AND device_id = :device_id"""), 
             {
@@ -211,7 +211,7 @@ def get_predictions(request: Request, today: bool = Path(description="A boolean 
             })
         #Case where previous predictions must be returned
         else:
-            predictions = connection.execute(text("""SELECT classification, confidence, 
+            predictions = connection.execute(text("""SELECT id, classification, confidence, 
             "timestamp" FROM prediction WHERE DATE("timestamp") < :current_date 
             AND device_id = :device_id AND DATE("timestamp") > 
             :current_date - :max_days * INTERVAL '1 day' """), 
@@ -226,7 +226,8 @@ def get_predictions(request: Request, today: bool = Path(description="A boolean 
         for row in rows:
             results.append({"Classification": row.classification, 
                             "Confidence": row.confidence, 
-                            "Timestamp": row.timestamp})
+                            "Timestamp": row.timestamp,
+                            "ID": row.id})
 
 
         return {"Predictions": results}    

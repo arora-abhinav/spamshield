@@ -13,6 +13,8 @@ import com.example.spamshield.token.TokenManager
 import android.util.Base64
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -26,8 +28,10 @@ class SpamShieldRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    suspend fun registerIfNeeded() {
-        if (TokenManager.isRegistered(context)) return
+    private val registrationMutex = Mutex()
+
+    suspend fun registerIfNeeded() = registrationMutex.withLock {
+        if (TokenManager.isRegistered(context)) return@withLock
         val response = api.register()
         if (response.isSuccessful) {
             val body = response.body()!!
@@ -73,21 +77,26 @@ class SpamShieldRepository @Inject constructor(
         }
     }
 
-    suspend fun predictMultiple(senders: List<String>, messages: List<String>): Result<BatchPredictionsResponse> {
+    suspend fun predictMultiple(senders: List<String>, messages: List<String>, timestamps: List<String>): Result<BatchPredictionsResponse> {
         return try {
             val response = api.predictMultiple(messages)
             if (response.isSuccessful) {
                 val batchResponse = response.body()!!
                 batchResponse.batchPredictions.forEachIndexed { index, prediction ->
-                    val entity = MessageEntity(
-                        predictionId = prediction.predictionId,
-                        messageText = messages.getOrElse(index) { "" },
-                        classification = prediction.classification.lowercase(),
-                        confidence = prediction.confidence,
-                        timestamp = prediction.time,
-                        sender = senders.getOrElse(index) { "Unknown" }
-                    )
-                    dao.insert(entity)
+                    val senderVal = senders.getOrElse(index) { "Unknown" }
+                    val bodyVal = messages.getOrElse(index) { "" }
+                    val timestampVal = timestamps.getOrElse(index) { prediction.time }
+                    if (!dao.existsBySenderBodyAndDate(senderVal, bodyVal, timestampVal)) {
+                        val entity = MessageEntity(
+                            predictionId = prediction.predictionId,
+                            messageText = bodyVal,
+                            classification = prediction.classification.lowercase(),
+                            confidence = prediction.confidence,
+                            timestamp = timestampVal,
+                            sender = senderVal
+                        )
+                        dao.insert(entity)
+                    }
                 }
                 Result.success(batchResponse)
             } else {

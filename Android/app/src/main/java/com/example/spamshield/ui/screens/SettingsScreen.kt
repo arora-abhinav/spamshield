@@ -1,5 +1,9 @@
 package com.example.spamshield.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.spamshield.token.TokenManager
 import com.example.spamshield.ui.theme.DarkBackground
@@ -53,12 +58,25 @@ fun SettingsScreen(viewModel: SpamShieldViewModel) {
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
+    val previousMsgConsent by viewModel.previousMsgConsent.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    val readSmsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.setPreviousMsgConsent(context, true)
+            viewModel.loadInboxMessages(context)
+        } else {
+            scope.launch { snackbarHostState.showSnackbar("SMS permission denied — cannot classify previous messages") }
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.loadOptedInState(context)
+        viewModel.loadPreviousMsgConsent(context)
     }
 
     LaunchedEffect(errorMessage) {
@@ -135,6 +153,61 @@ fun SettingsScreen(viewModel: SpamShieldViewModel) {
                     Switch(
                         checked = optedIn,
                         onCheckedChange = { viewModel.setConsent(it) },
+                        enabled = !isLoading,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = HamGreen,
+                            uncheckedThumbColor = TextSecondary,
+                            uncheckedTrackColor = Color(0xFF2A2A42)
+                        )
+                    )
+                }
+            }
+
+            // Previous messages toggle
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "Classify previous messages",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Run your existing SMS inbox through the spam classifier. Only done once.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = previousMsgConsent,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                val granted = ContextCompat.checkSelfPermission(
+                                    context, Manifest.permission.READ_SMS
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (granted) {
+                                    viewModel.setPreviousMsgConsent(context, true)
+                                    viewModel.loadInboxMessages(context)
+                                } else {
+                                    readSmsLauncher.launch(Manifest.permission.READ_SMS)
+                                }
+                            } else {
+                                viewModel.setPreviousMsgConsent(context, false)
+                            }
+                        },
                         enabled = !isLoading,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,

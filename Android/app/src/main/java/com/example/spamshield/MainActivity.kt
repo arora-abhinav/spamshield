@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         val readGranted = permissions[Manifest.permission.READ_SMS] == true
         val receiveGranted = permissions[Manifest.permission.RECEIVE_SMS] == true
-        if (readGranted || receiveGranted) {
+        if ((readGranted || receiveGranted) && com.example.spamshield.token.TokenManager.getPreviousMsgConsent(this)) {
             viewModel.loadInboxMessages(this)
         }
     }

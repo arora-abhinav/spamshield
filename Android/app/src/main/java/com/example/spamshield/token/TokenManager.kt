@@ -13,6 +13,7 @@ object TokenManager {
     private const val KEY_IS_REGISTERED = "is_registered"
     private const val KEY_OPTED_IN = "opted_in"
     private const val KEY_HAS_SYNCED_INBOX = "has_synced_inbox"
+    private const val KEY_PREVIOUS_MSG_CONSENT = "previous_msg_consent"
 
     @Volatile private var prefs: SharedPreferences? = null
 
@@ -71,6 +72,13 @@ object TokenManager {
 
     fun setOptedIn(context: Context, value: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_OPTED_IN, value).apply()
+    }
+
+    fun getPreviousMsgConsent(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_PREVIOUS_MSG_CONSENT, false)
+
+    fun setPreviousMsgConsent(context: Context, value: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_PREVIOUS_MSG_CONSENT, value).apply()
     }
 
     fun hasSyncedInbox(context: Context): Boolean =

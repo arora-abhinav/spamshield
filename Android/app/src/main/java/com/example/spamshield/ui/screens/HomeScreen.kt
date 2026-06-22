@@ -86,24 +86,10 @@ fun HomeScreen(viewModel: SpamShieldViewModel) {
 
     val smsPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions[Manifest.permission.READ_SMS] == true) {
-            viewModel.loadInboxMessages(context)
-        }
-    }
+    ) { /* result handled — app degrades gracefully if denied */ }
 
     LaunchedEffect(Unit) {
-        viewModel.registerIfNeeded()
-        val readSmsGranted = androidx.core.content.ContextCompat.checkSelfPermission(
-            context, Manifest.permission.READ_SMS
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (readSmsGranted) {
-            viewModel.loadInboxMessages(context)
-        } else {
-            smsPermissionLauncher.launch(
-                arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
-            )
-        }
+        smsPermissionLauncher.launch(arrayOf(Manifest.permission.RECEIVE_SMS))
     }
 
     LaunchedEffect(errorMessage) {
