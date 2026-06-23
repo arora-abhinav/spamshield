@@ -126,7 +126,7 @@
     <header>
       <div class="app-name">SpamShield</div>
       <h1>Privacy Policy</h1>
-      <p class="meta">Effective date: June 22, 2026 &nbsp;·&nbsp; Last updated: June 22, 2026</p>
+      <p class="meta">Effective date: June 22, 2026 &nbsp;·&nbsp; Last updated: June 23, 2026</p>
     </header>
 
     <div class="highlight-box">
@@ -143,6 +143,8 @@
       <li><strong>RECEIVE_SMS</strong> — to classify new incoming messages in real time as they arrive.</li>
       <li><strong>POST_NOTIFICATIONS</strong> — to display a status notification while the app processes an incoming message in the background. Required on Android 13 and above.</li>
     </ul>
+    <p>Before requesting SMS access on first launch, the app displays an in-app disclosure dialog explaining exactly what data is accessed, how it is used, and where it is sent. SMS permissions are only requested after you acknowledge this disclosure. You may decline at any time; the app will function in a degraded mode without SMS access.</p>
+    <p>SpamShield also runs as a foreground service in the background to classify new messages as they arrive via <strong>RECEIVE_SMS</strong>. A persistent status notification is shown whenever the service is actively processing a message, in accordance with Android's foreground service requirements.</p>
     <p>SMS message text is transmitted to our classification server <em>only</em> for the purpose of determining whether the message is spam. It is processed in memory and is <strong>never written to disk or stored in any database</strong> on our servers.</p>
 
     <h2>3. What data we store</h2>
@@ -154,7 +156,8 @@
     </ul>
     <p><strong>We do not store the text content of your messages, sender information, or any personally identifiable content on our servers under any circumstances.</strong></p>
     <p>To reduce the risk of legitimate messages being incorrectly flagged, the classifier uses a conservative confidence threshold of <strong>88%</strong>. A message is only classified as spam if the model is at least 88% confident. Messages below this threshold are always treated as legitimate, regardless of the model's raw output. This deliberately minimises false positives at the cost of occasionally missing low-confidence spam.</p>
-    <p>A local copy of classification results — including message text, sender identifier, confidence score, and timestamp — is stored in a standard SQLite database on your device via Android Room. This local database is not encrypted, but it is private to the app and inaccessible to other apps on the device. Authentication tokens (JWT) are stored separately in Android EncryptedSharedPreferences. You can delete all locally stored data at any time from within the app.</p>
+    <p><strong>Model limitations:</strong> No machine learning model is perfect. Based on internal evaluation on held-out test data, the classifier achieves approximately 97% overall accuracy, with a false positive rate (legitimate messages incorrectly flagged as spam) of under 3%. The 88% confidence threshold further reduces false positives in practice. If a message is misclassified, you can correct it using the feedback feature in the message detail view. Your corrections help improve future model accuracy.</p>
+    <p>A local copy of classification results — including message text, sender identifier, confidence score, and timestamp — is stored in a standard SQLite database on your device via Android Room. This local database is not encrypted at the application level; however, Android provides file-based encryption (FBE) at the operating system level on all modern Android devices, which protects app data at rest when the device is locked. Authentication tokens (JWT) are stored separately in Android EncryptedSharedPreferences with AES-256 encryption. You can delete all locally stored data at any time from within the app.</p>
 
     <h2>4. Feedback and optional data sharing</h2>
     <p>If you choose to report a misclassification, we store a feedback record linked to the original classification. Message text is <strong>never shared automatically</strong> — not when a message arrives, not when it is classified, and not when feedback is submitted without opt-in.</p>
@@ -167,7 +170,14 @@
     </ol>
     <p>This means a legitimate message can only reach our servers if you personally and deliberately label it as spam through four separate steps — it cannot happen passively or by accident. Disabling the toggle at any time stops all future sharing immediately. Any previously shared messages can be deleted on request by contacting us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a>.</p>
 
-    <h2>5. How we use your data</h2>
+    <h2>5. Lawful basis for processing</h2>
+    <p>We process your data on the following legal grounds:</p>
+    <ul>
+      <li><strong>Legitimate interest</strong> — classifying incoming SMS messages to protect you from spam is the core purpose of the app. We process the minimum data necessary (message text sent transiently for classification; anonymous metadata retained) to deliver this service.</li>
+      <li><strong>Consent</strong> — the optional "Share spam messages for training" feature, and the "Classify previous messages" inbox scan, are both strictly opt-in. You may withdraw consent for either at any time from the Settings screen without affecting your use of the app.</li>
+    </ul>
+
+    <h2>6. How we use your data</h2>
     <p>Data collected is used exclusively for:</p>
     <ul>
       <li>Providing spam classification results to you</li>
@@ -176,32 +186,34 @@
     </ul>
     <p>We do not use your data for advertising, profiling, or any purpose unrelated to spam classification.</p>
 
-    <h2>6. Data sharing and third parties</h2>
+    <h2>7. Data sharing and third parties</h2>
     <p>We do not sell, rent, or share your data with any third parties. The classification server is hosted on Railway (railway.app). Railway's infrastructure processes your requests in transit; no user data is shared with Railway beyond standard hosting operations. Railway's privacy policy is available at <a href="https://railway.app/legal/privacy" target="_blank" rel="noopener">railway.app/legal/privacy</a>.</p>
 
-    <h2>7. Data retention and deletion</h2>
-    <p>Classification metadata is retained on our server for as long as your device remains registered. You may request full deletion of all data associated with your device at any time by using the <strong>"Delete All Stored Spam"</strong> button in the app's Settings screen, which sends a deletion request to our server and clears your local database simultaneously. You may also email us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a> to request manual deletion.</p>
+    <h2>8. Data retention and deletion</h2>
+    <p>Classification metadata is retained on our server for a rolling window of <strong>90 days</strong>. Records older than 90 days are automatically excluded from all queries and are not returned to the app. You may request full deletion of all data associated with your device at any time by using the <strong>"Delete All Stored Spam"</strong> button in the app's Settings screen, which sends a deletion request to our server and clears your local database simultaneously.</p>
+    <p><strong>Forgot to delete before uninstalling?</strong> Your Device ID and settings are backed up automatically via Android Auto Backup to your Google account. If you reinstall SpamShield on the same device while signed into the same Google account, your Device ID and preferences will be restored automatically — you can then press <strong>"Delete All Stored Spam"</strong> in Settings exactly as normal. No email or manual steps required.</p>
+    <p>If Auto Backup is unavailable or you no longer have access to the same Google account, email us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a> with your <strong>Device ID</strong> (note it down from Settings before uninstalling). Without the Device ID we cannot identify or delete your specific records.</p>
 
-    <h2>8. Security</h2>
-    <p>All communication between the app and our server uses HTTPS. Authentication is handled via short-lived JWT access tokens with rotating refresh tokens stored in Android EncryptedSharedPreferences. Your anonymous device ID is never transmitted in plain text. We do not store passwords or any credentials linked to your personal identity.</p>
+    <h2>9. Security</h2>
+    <p>All communication between the app and our server uses HTTPS. Authentication is handled via short-lived JWT access tokens (30-minute expiry) with rotating refresh tokens (15-day expiry) stored in Android EncryptedSharedPreferences. Your anonymous device ID is never transmitted in plain text. We do not store passwords or any credentials linked to your personal identity.</p>
+    <p>In the event of a data breach affecting your anonymised classification records, we will notify affected users by publishing a notice within this policy and, where possible, through an in-app notification, within <strong>72 hours</strong> of becoming aware of the breach.</p>
 
-    <h2>9. Children's privacy</h2>
+    <h2>10. Children's privacy</h2>
     <p>SpamShield is not directed at children under the age of 13. We do not knowingly collect data from children. If you believe a child has used the app, please contact us and we will delete any associated data.</p>
 
-    <h2>10. Your rights</h2>
+    <h2>11. Your rights</h2>
     <p>You have the right to:</p>
     <ul>
-      <li>Access the classification metadata stored for your device</li>
-      <li>Delete all data associated with your device at any time</li>
-      <li>Withdraw consent for optional data sharing at any time</li>
+      <li>Delete all data associated with your device at any time (in-app or by emailing us with your Device ID)</li>
+      <li>Withdraw consent for optional data sharing at any time via the Settings screen</li>
       <li>Revoke SMS permissions at any time via Android Settings → Apps → SpamShield → Permissions</li>
     </ul>
-    <p>To exercise any of these rights, use the in-app Settings screen or contact us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a>.</p>
+    <p>We will respond to all data-related requests within <strong>30 days</strong> of receipt. To exercise any of these rights, use the in-app Settings screen or contact us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a>.</p>
 
-    <h2>11. Changes to this policy</h2>
+    <h2>12. Changes to this policy</h2>
     <p>If we make material changes to this policy, we will update the effective date at the top of this page. Continued use of the app after changes constitutes acceptance of the updated policy.</p>
 
-    <h2>12. Contact</h2>
+    <h2>13. Contact</h2>
     <p>For any privacy-related questions or requests, contact:<br>
     Abhinav Arora<br>
     <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a></p>
@@ -209,7 +221,7 @@
     <hr class="section-divider" />
 
     <footer>
-      <p>SpamShield Privacy Policy · Effective June 22, 2026</p>
+      <p>SpamShield Privacy Policy · Effective June 23, 2026</p>
     </footer>
   </div>
 </body>

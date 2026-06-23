@@ -103,3 +103,38 @@ def refresh(request: Request, device_id = Depends(verify_token("refresh"))):
         connection.commit()
         #Returning the new access_token to the client
         return {"refresh_token": refresh_token, "access_token": access_token}
+
+
+#Restore a previous device session after app reinstall
+#Accepts an existing device_id, verifies it exists, returns fresh JWT tokens without creating a new device
+@router.post("/restore")
+def restore(request: Request, device_id: str = Body(embed=True)):
+    with engine.connect() as connection:
+        #Check device_refresh_token table first (direct registration record)
+        exists = connection.execute(text("""
+            SELECT COUNT(*) FROM device_refresh_token WHERE device_id = :device_id
+        """), {"device_id": device_id}).scalar()
+
+        #Fall back to prediction table (device existed but refresh token may have been rotated out)
+        if not exists:
+            exists = connection.execute(text("""
+                SELECT COUNT(*) FROM prediction WHERE device_id = :device_id LIMIT 1
+            """), {"device_id": device_id}).scalar()
+
+        if not exists:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+        #Rotate refresh token
+        connection.execute(text("""
+            DELETE FROM device_refresh_token WHERE device_id = :device_id
+        """), {"device_id": device_id})
+
+        access_token = create_token(data={"device_id": device_id, "type": "access"}, expires_delta=timedelta(minutes=30))
+        refresh_token = create_token(data={"device_id": device_id, "type": "refresh"}, expires_delta=timedelta(days=15))
+
+        connection.execute(text("""
+            INSERT INTO device_refresh_token(device_id, refresh_token) VALUES(:device_id, :refresh_token)
+        """), {"device_id": device_id, "refresh_token": refresh_token})
+
+        connection.commit()
+        return {"access_token": access_token, "refresh_token": refresh_token, "device_id": device_id}

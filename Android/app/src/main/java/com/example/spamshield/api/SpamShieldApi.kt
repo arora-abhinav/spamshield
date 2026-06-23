@@ -1,6 +1,7 @@
 package com.example.spamshield.api
 
 import com.example.spamshield.dataclasses.AuthorizationResponse
+import com.example.spamshield.dataclasses.RestoreRequest
 import com.example.spamshield.dataclasses.BatchPredictionsResponse
 import com.example.spamshield.dataclasses.FeedbackRequest
 import com.example.spamshield.dataclasses.FeedbackResponse
@@ -24,6 +25,9 @@ interface SpamShieldApi {
 
     @GET("register")
     suspend fun register(): Response<AuthorizationResponse>
+
+    @POST("restore")
+    suspend fun restore(@Body request: RestoreRequest): Response<AuthorizationResponse>
 
     @GET("refresh")
     fun refreshSync(@Header("Authorization") bearerToken: String): Call<AuthorizationResponse>

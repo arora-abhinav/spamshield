@@ -8,6 +8,7 @@ import com.example.spamshield.dataclasses.BatchPredictionsResponse
 import com.example.spamshield.dataclasses.FeedbackRequest
 import com.example.spamshield.dataclasses.OptOutResponse
 import com.example.spamshield.dataclasses.PredictionsResponse
+import com.example.spamshield.dataclasses.RestoreRequest
 import com.example.spamshield.dataclasses.StatisticsResponse
 import com.example.spamshield.token.TokenManager
 import android.util.Base64
@@ -45,6 +46,22 @@ class SpamShieldRepository @Inject constructor(
 
     suspend fun registerIfNeeded() = registrationMutex.withLock {
         if (TokenManager.isRegistered(context)) return@withLock
+
+        // If a device_id survived reinstall via Auto Backup, restore the session instead of
+        // creating a new device entry on the server.
+        val backedUpId = TokenManager.getBackedUpDeviceId(context)
+        if (backedUpId != null) {
+            try {
+                val restoreResponse = api.restore(RestoreRequest(backedUpId))
+                if (restoreResponse.isSuccessful) {
+                    val body = restoreResponse.body()!!
+                    TokenManager.saveTokens(context, body.accessToken, body.refreshToken, backedUpId)
+                    TokenManager.setRegistered(context, true)
+                    return@withLock
+                }
+            } catch (_: Exception) { /* server not found or network error — fall through */ }
+        }
+
         val response = api.register()
         if (response.isSuccessful) {
             val body = response.body()!!
