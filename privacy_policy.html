@@ -145,7 +145,7 @@
     </ul>
     <p>Before requesting SMS access on first launch, the app displays an in-app disclosure dialog explaining exactly what data is accessed, how it is used, and where it is sent. SMS permissions are only requested after you acknowledge this disclosure. You may decline at any time; the app will function in a degraded mode without SMS access.</p>
     <p>SpamShield also runs as a foreground service in the background to classify new messages as they arrive via <strong>RECEIVE_SMS</strong>. A persistent status notification is shown whenever the service is actively processing a message, in accordance with Android's foreground service requirements.</p>
-    <p>SMS message text is transmitted to our classification server <em>only</em> for the purpose of determining whether the message is spam. It is processed in memory and is <strong>never written to disk or stored in any database</strong> on our servers.</p>
+    <p>SMS message text is transmitted over <strong>HTTPS</strong> to our classification server <em>only</em> for the purpose of determining whether the message is spam. It is processed in memory and is <strong>never written to disk or stored in any database</strong> on our servers. Classification completes within milliseconds and the message text is discarded immediately afterwards.</p>
 
     <h2>3. What data we store</h2>
     <p>We store a limited set of classification metadata associated with an anonymous device identifier (a randomly generated UUID assigned at registration — not your phone number, IMEI, or any other hardware identifier). This metadata includes:</p>
@@ -176,6 +176,7 @@
       <li><strong>Legitimate interest</strong> — classifying incoming SMS messages to protect you from spam is the core purpose of the app. We process the minimum data necessary (message text sent transiently for classification; anonymous metadata retained) to deliver this service.</li>
       <li><strong>Consent</strong> — the optional "Share spam messages for training" feature, and the "Classify previous messages" inbox scan, are both strictly opt-in. You may withdraw consent for either at any time from the Settings screen without affecting your use of the app.</li>
     </ul>
+    <p>SpamShield is designed to align with the principles of the <strong>Digital Personal Data Protection Act, 2023 (DPDPA)</strong>, including processing personal data only for stated purposes, with appropriate notice, and only to the extent necessary. As the DPDPA's implementing rules continue to be notified, we will update our practices accordingly.</p>
 
     <h2>6. How we use your data</h2>
     <p>Data collected is used exclusively for:</p>
@@ -184,10 +185,10 @@
       <li>Displaying your personal usage statistics within the app</li>
       <li>Improving the accuracy of the classification model (only with your explicit opt-in consent for spam feedback)</li>
     </ul>
-    <p>We do not use your data for advertising, profiling, or any purpose unrelated to spam classification.</p>
+    <p>We do not use your data for advertising, profiling, or any purpose unrelated to spam classification. SpamShield contains <strong>no third-party analytics, crash reporting, or tracking SDKs</strong> — no Firebase Analytics, Sentry, Crashlytics, or equivalent. All usage statistics shown in the app are derived solely from the anonymised classification metadata stored on our own server.</p>
 
     <h2>7. Data sharing and third parties</h2>
-    <p>We do not sell, rent, or share your data with any third parties. The classification server is hosted on Railway (railway.app). Railway's infrastructure processes your requests in transit; no user data is shared with Railway beyond standard hosting operations. Railway's privacy policy is available at <a href="https://railway.app/legal/privacy" target="_blank" rel="noopener">railway.app/legal/privacy</a>.</p>
+    <p>We do not sell, rent, or share your data with any third parties. Our sole subprocessor is <strong>Railway (railway.app)</strong>, which hosts the classification server. Because classification requests are standard HTTPS calls, Railway's infrastructure transiently handles message text as part of normal request routing — the same way any hosting provider handles web traffic. Railway does not store, log, or process message content beyond what is inherent to operating an HTTPS server. Railway's privacy policy is available at <a href="https://railway.app/legal/privacy" target="_blank" rel="noopener">railway.app/legal/privacy</a>.</p>
 
     <h2>8. Data retention and deletion</h2>
     <p>Classification metadata is retained on our server for a rolling window of <strong>90 days</strong>. Records older than 90 days are automatically excluded from all queries and are not returned to the app. You may request full deletion of all data associated with your device at any time by using the <strong>"Delete All Stored Spam"</strong> button in the app's Settings screen, which sends a deletion request to our server and clears your local database simultaneously.</p>
@@ -196,10 +197,10 @@
 
     <h2>9. Security</h2>
     <p>All communication between the app and our server uses HTTPS. Authentication is handled via short-lived JWT access tokens (30-minute expiry) with rotating refresh tokens (15-day expiry) stored in Android EncryptedSharedPreferences. Your anonymous device ID is never transmitted in plain text. We do not store passwords or any credentials linked to your personal identity.</p>
-    <p>In the event of a data breach affecting your anonymised classification records, we will notify affected users by publishing a notice within this policy and, where possible, through an in-app notification, within <strong>72 hours</strong> of becoming aware of the breach.</p>
+    <p>In the event of a data breach affecting your anonymised classification records, we will notify affected users by publishing a notice within this policy and, where possible, through an in-app notification, within <strong>72 hours</strong> of becoming aware of the breach. We will also report the incident to relevant authorities as required by applicable law.</p>
 
     <h2>10. Children's privacy</h2>
-    <p>SpamShield is not directed at children under the age of 13. We do not knowingly collect data from children. If you believe a child has used the app, please contact us and we will delete any associated data.</p>
+    <p>SpamShield is intended for users aged <strong>13 and above</strong>. We do not knowingly collect data from children under 13. If we become aware that a child under 13 has used the app, we will delete all associated data immediately. If you believe a child has used the app, please contact us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a>.</p>
 
     <h2>11. Your rights</h2>
     <p>You have the right to:</p>
