@@ -35,6 +35,13 @@ class SpamShieldRepository @Inject constructor(
 
     private val _statistics = MutableStateFlow<StatisticsResponse?>(null)
     val statistics: StateFlow<StatisticsResponse?> = _statistics.asStateFlow()
+    var statisticsCacheDate: String = ""
+        private set
+
+    private val _historyCache = MutableStateFlow<List<MessageEntity>?>(null)
+    val historyCache: StateFlow<List<MessageEntity>?> = _historyCache.asStateFlow()
+    var historyCacheDate: String = ""
+        private set
 
     suspend fun registerIfNeeded() = registrationMutex.withLock {
         if (TokenManager.isRegistered(context)) return@withLock
@@ -139,8 +146,11 @@ class SpamShieldRepository @Inject constructor(
                     confidence = serverPrediction.confidence ?: 0.0,
                     timestamp = serverPrediction.timestamp ?: ""
                 )
-            }
-            Result.success(merged.sortedByDescending { it.timestamp })
+            }.sortedByDescending { it.timestamp }
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            historyCacheDate = sdf.format(java.util.Date())
+            _historyCache.value = merged
+            Result.success(merged)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -152,11 +162,53 @@ class SpamShieldRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()!!
                 _statistics.value = body
+                statisticsCacheDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    .format(java.util.Date())
                 Result.success(body)
             } else Result.failure(Exception("Fetch statistics failed: ${response.code()}"))
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    fun updateStatsCacheAfterPrediction(classification: String, confidence: Double) {
+        val current = _statistics.value ?: return
+        val isSpam = classification == "spam"
+        val oldTotal = current.totalMessages ?: 0
+        val oldSpamCount = current.spamCount ?: 0
+
+        val newTotal = oldTotal + 1
+        val newSpamCount = oldSpamCount + if (isSpam) 1 else 0
+        val newHamCount = (current.hamCount ?: 0) + if (!isSpam) 1 else 0
+        val newSpamPct = if (newTotal > 0) newSpamCount.toDouble() / newTotal * 100 else 0.0
+
+        val newAvgConfAll = if (oldTotal == 0) confidence
+            else ((current.averageConfidenceAll ?: 0.0) * oldTotal + confidence) / newTotal
+        val newAvgConfSpam = if (isSpam) {
+            if (oldSpamCount == 0) confidence
+            else ((current.averageConfidenceSpam ?: 0.0) * oldSpamCount + confidence) / newSpamCount
+        } else current.averageConfidenceSpam
+
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
+        val cacheIsCurrent = statisticsCacheDate == today
+
+        _statistics.value = current.copy(
+            totalMessages = newTotal,
+            spamCount = newSpamCount,
+            hamCount = newHamCount,
+            spamPercentage = newSpamPct,
+            averageConfidenceAll = newAvgConfAll,
+            averageConfidenceSpam = newAvgConfSpam,
+            weekSpamCount = if (isSpam) (current.weekSpamCount ?: 0) + 1 else current.weekSpamCount,
+            monthSpamCount = if (isSpam) (current.monthSpamCount ?: 0) + 1 else current.monthSpamCount,
+            todaySpamCount = if (isSpam && cacheIsCurrent) (current.todaySpamCount ?: 0) + 1 else current.todaySpamCount,
+            weeklySpamDistribution = if (isSpam && cacheIsCurrent) {
+                current.weeklySpamDistribution?.map { item ->
+                    if (item.date == today) item.copy(count = item.count + 1) else item
+                }
+            } else current.weeklySpamDistribution
+        )
     }
 
     suspend fun submitFeedback(predictionId: Int, actual: String, messageText: String?) {

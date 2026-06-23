@@ -67,8 +67,10 @@ class SpamShieldViewModel @Inject constructor(
     }
 
     fun loadStatistics() {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
         val cached = repository.statistics.value
-        if (cached != null) {
+        if (cached != null && repository.statisticsCacheDate == today) {
             _statisticsState.value = UiState.Success(cached)
             return
         }
@@ -132,6 +134,13 @@ class SpamShieldViewModel @Inject constructor(
     }
 
     fun loadHistory() {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
+        val cached = repository.historyCache.value
+        if (cached != null && repository.historyCacheDate == today) {
+            _historyState.value = UiState.Success(cached)
+            return
+        }
         if (_historyState.value is UiState.Loading) return
         viewModelScope.launch {
             _historyState.value = UiState.Loading

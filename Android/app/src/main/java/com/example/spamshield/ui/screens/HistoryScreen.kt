@@ -66,9 +66,7 @@ fun HistoryScreen(viewModel: SpamShieldViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.loadPreviousMsgConsent(context)
-        val alreadyLoaded = historyState is UiState.Success &&
-            (historyState as UiState.Success).data.isNotEmpty()
-        if (!alreadyLoaded) viewModel.loadHistory()
+        viewModel.loadHistory()
     }
 
     LaunchedEffect(errorMessage) {

@@ -153,10 +153,19 @@
       <li>Timestamp of classification</li>
     </ul>
     <p><strong>We do not store the text content of your messages, sender information, or any personally identifiable content on our servers under any circumstances.</strong></p>
+    <p>To reduce the risk of legitimate messages being incorrectly flagged, the classifier uses a conservative confidence threshold of <strong>88%</strong>. A message is only classified as spam if the model is at least 88% confident. Messages below this threshold are always treated as legitimate, regardless of the model's raw output. This deliberately minimises false positives at the cost of occasionally missing low-confidence spam.</p>
     <p>A local copy of classification results — including message text, sender identifier, confidence score, and timestamp — is stored in a standard SQLite database on your device via Android Room. This local database is not encrypted, but it is private to the app and inaccessible to other apps on the device. Authentication tokens (JWT) are stored separately in Android EncryptedSharedPreferences. You can delete all locally stored data at any time from within the app.</p>
 
     <h2>4. Feedback and optional data sharing</h2>
-    <p>If you choose to report a misclassification (i.e., tell us a message was classified incorrectly), we store a feedback record linked to the original classification. If and only if you have explicitly opted in to data contribution <em>and</em> the corrected label is spam, the message text may be sent to us to improve the model. You can opt out at any time from the Settings screen, and any previously shared messages can be deleted on request.</p>
+    <p>If you choose to report a misclassification, we store a feedback record linked to the original classification. Message text is <strong>never shared automatically</strong> — not when a message arrives, not when it is classified, and not when feedback is submitted without opt-in.</p>
+    <p>Message text is only transmitted to us when <em>all</em> of the following conditions are met simultaneously:</p>
+    <ol>
+      <li>You have explicitly enabled "Share spam messages for training" in Settings.</li>
+      <li>You manually open a specific message's detail view.</li>
+      <li>You tap "Mark as Spam" on that message.</li>
+      <li>You confirm the action in the confirmation dialog.</li>
+    </ol>
+    <p>This means a legitimate message can only reach our servers if you personally and deliberately label it as spam through four separate steps — it cannot happen passively or by accident. Disabling the toggle at any time stops all future sharing immediately. Any previously shared messages can be deleted on request by contacting us at <a href="mailto:aroraabhinav2007@gmail.com">aroraabhinav2007@gmail.com</a>.</p>
 
     <h2>5. How we use your data</h2>
     <p>Data collected is used exclusively for:</p>
